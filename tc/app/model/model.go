@@ -51,7 +51,7 @@ type ModelStorage interface {
 	// find expired transactions
 	FindLeaseExpired(ctx context.Context, txn string, states []string, limit int) ([]*Txn, error)
 	FindExpired(ctx context.Context, txn string, limit int) ([]*Txn, error)
-	FindEnded(ctx context.Context, txn string, untileTime time.Time, limit int) ([]*Txn, error)
+	CleanExpiredTxns(ctx context.Context, txn string, untileTime time.Time, limit int) ([]*Txn, error)
 }
 
 type modelStorage struct {
@@ -226,8 +226,8 @@ func (ms *modelStorage) FindLeaseExpired(ctx context.Context, txnType string, st
 	return txns, err
 }
 
-func (ms *modelStorage) FindEnded(ctx context.Context, txnType string, untileTime time.Time, limit int) (txns []*Txn, err error) {
-	defer sagaModelTimer.Timer()("FindEnded", operator.IfElse((err != nil), "err", "ok").(string))
+func (ms *modelStorage) CleanExpiredTxns(ctx context.Context, txnType string, untilTime time.Time, limit int) (txns []*Txn, err error) {
+	defer sagaModelTimer.Timer()("CleanExpiredTxns", operator.IfElse((err != nil), "err", "ok").(string))
 
 	ctx, cancel := ms.timeoutContext(ctx)
 	defer cancel()
@@ -236,7 +236,7 @@ func (ms *modelStorage) FindEnded(ctx context.Context, txnType string, untileTim
 
 	txns = make([]*Txn, 0)
 	err = ms.Db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		txa := tx.Model(&Txn{}).Where("txn_type = ? AND state IN ? AND lease_expire_time < ?", txnType, states, untileTime)
+		txa := tx.Model(&Txn{}).Where("txn_type = ? AND state IN ? AND expire_time < ?", txnType, states, untilTime)
 		txa.Order("id ASC").Limit(limit)
 		txr := txa.Find(&txns)
 		if txr.Error != nil {

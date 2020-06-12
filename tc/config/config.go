@@ -15,15 +15,16 @@ import (
 )
 
 type StorageConfig struct {
-	Driver               string
-	Dsn                  string
-	MaxConnections       int
-	MaxIdleConnections   int
-	Timeout              time.Duration
-	ExpiredLimit         int
-	CleanExpired         time.Duration
-	CleanLimit           int
-	CheckExpiredDuration time.Duration
+	Driver                    string
+	Dsn                       string
+	MaxConnections            int
+	MaxIdleConnections        int
+	Timeout                   time.Duration
+	CheckLeaseExpiredDuration time.Duration
+	LeaseExpiredLimit         int
+	CleanExpired              time.Duration
+	CleanLimit                int
+	CheckExpiredDuration      time.Duration
 }
 
 type NodeConfig struct {

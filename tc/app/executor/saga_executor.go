@@ -85,7 +85,7 @@ func (se *SagaExecutor) Commit(ctx context.Context, txn *model.Txn) *ActionFutur
 func (se *SagaExecutor) startCrontab() {
 	defer errorutil.Recovery()
 
-	limit := se.cfg.ExpiredLimit
+	limit := se.cfg.LeaseExpiredLimit
 	if limit <= 0 {
 		limit = 20
 	}

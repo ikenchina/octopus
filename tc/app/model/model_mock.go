@@ -290,14 +290,14 @@ func (store *modelStorageMock) RegisterBranches(ctx context.Context, branches []
 	return nil
 }
 
-func (store *modelStorageMock) FindEnded(ctx context.Context, txnType string, untileTime time.Time, limit int) ([]*Txn, error) {
+func (store *modelStorageMock) CleanExpiredTxns(ctx context.Context, txnType string, untilTime time.Time, limit int) ([]*Txn, error) {
 	store.Lock()
 	defer store.Unlock()
 
 	states := []string{TxnStateAborted, TxnStateCommitted}
 	txns := make([]*Txn, 0)
 	for _, rr := range store.records {
-		if rr.ExpireTime.Before(untileTime) {
+		if rr.ExpireTime.Before(untilTime) {
 			if len(txns) >= limit {
 				break
 			}

@@ -43,7 +43,7 @@ func (se *TccExecutor) Stop() error {
 func (te *TccExecutor) startCrontab() {
 	defer errorutil.Recovery()
 
-	limit := te.cfg.ExpiredLimit
+	limit := te.cfg.LeaseExpiredLimit
 	if limit <= 0 {
 		limit = 20
 	}

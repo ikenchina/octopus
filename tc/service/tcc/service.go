@@ -43,13 +43,13 @@ func NewTccService(cfg Config) (*TccService, error) {
 	}
 
 	executor, err := executor.NewTccExecutor(executor.Config{
-		Store:                store,
-		MaxConcurrency:       cfg.MaxConcurrentTask,
-		Lessee:               cfg.Lessee,
-		ExpiredLimit:         cfg.Store.ExpiredLimit,
-		CleanExpired:         cfg.Store.CleanExpired,
-		CleanLimit:           cfg.Store.CleanLimit,
-		CheckExpiredDuration: cfg.Store.CheckExpiredDuration,
+		Store:                     store,
+		MaxConcurrency:            cfg.MaxConcurrentTask,
+		Lessee:                    cfg.Lessee,
+		LeaseExpiredLimit:         cfg.Store.LeaseExpiredLimit,
+		CleanExpired:              cfg.Store.CleanExpired,
+		CleanLimit:                cfg.Store.CleanLimit,
+		CheckLeaseExpiredDuration: cfg.Store.CheckLeaseExpiredDuration,
 	})
 	if err != nil {
 		return nil, err

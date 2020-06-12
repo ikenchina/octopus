@@ -43,13 +43,14 @@ func NewSagaService(cfg Config) (*SagaService, error) {
 	}
 
 	executor, err := executor.NewSagaExecutor(executor.Config{
-		Store:                store,
-		MaxConcurrency:       cfg.MaxConcurrentTask,
-		Lessee:               cfg.Lessee,
-		ExpiredLimit:         cfg.Store.ExpiredLimit,
-		CleanExpired:         cfg.Store.CleanExpired,
-		CleanLimit:           cfg.Store.CleanLimit,
-		CheckExpiredDuration: cfg.Store.CheckExpiredDuration,
+		Store:                     store,
+		MaxConcurrency:            cfg.MaxConcurrentTask,
+		Lessee:                    cfg.Lessee,
+		LeaseExpiredLimit:         cfg.Store.LeaseExpiredLimit,
+		CleanExpired:              cfg.Store.CleanExpired,
+		CleanLimit:                cfg.Store.CleanLimit,
+		CheckLeaseExpiredDuration: cfg.Store.CheckLeaseExpiredDuration,
+		CheckExpiredDuration:      cfg.Store.CheckExpiredDuration,
 	})
 	if err != nil {
 		return nil, err

@@ -360,7 +360,7 @@ func (s *_Suite) TestGrantLeaseIncBranch() {
 	s.Equal(2, txn2.Branches[0].TryCount)
 }
 
-func (s *_Suite) TestFindEnded() {
+func (s *_Suite) TestCleanExpiredTxns() {
 	ms, err := NewModelStorage(s.driver, s.dsn, s.timeout, 1, 1, s.lessee)
 	s.Nil(err)
 	states := []string{TxnStateAborted, TxnStateCommitted}
@@ -383,7 +383,7 @@ func (s *_Suite) TestFindEnded() {
 	now := time.Now()
 	expiredTime := now.Add(10 * time.Second)
 	fn := func(expectedLimit int) {
-		expired, err := ms.FindEnded(context.Background(), define.TxnTypeSaga, expiredTime, 20)
+		expired, err := ms.CleanExpiredTxns(context.Background(), define.TxnTypeSaga, expiredTime, 20)
 		s.Nil(err)
 		s.Equal(expectedLimit, len(expired))
 		for _, e := range expired {

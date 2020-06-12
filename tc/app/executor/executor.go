@@ -37,13 +37,14 @@ var (
 )
 
 type Config struct {
-	Store                model.ModelStorage
-	MaxConcurrency       int
-	Lessee               string
-	ExpiredLimit         int
-	CleanExpired         time.Duration
-	CleanLimit           int
-	CheckExpiredDuration time.Duration
+	Store                     model.ModelStorage
+	MaxConcurrency            int
+	Lessee                    string
+	LeaseExpiredLimit         int
+	CleanExpired              time.Duration
+	CleanLimit                int
+	CheckExpiredDuration      time.Duration
+	CheckLeaseExpiredDuration time.Duration
 }
 
 func NewActionNotify(ctx context.Context, txn *model.Txn, bt string, action, payload string) *ActionNotify {
@@ -147,7 +148,7 @@ func (ex *baseExecutor) start() error {
 	ex.taskChan = make(chan *actionTask, ex.cfg.MaxConcurrency*2)
 	ex.tasks = make(map[string]*actionTask)
 	ex.notifyChan = make(chan *ActionNotify, ex.cfg.MaxConcurrency*4)
-	ex.cronDuration = ex.cfg.CheckExpiredDuration
+	ex.cronDuration = ex.cfg.CheckLeaseExpiredDuration
 	if ex.cronDuration == time.Duration(0) {
 		ex.cronDuration = time.Second * 1
 	}
@@ -202,10 +203,10 @@ func (ex *baseExecutor) startCleanup(txn string) {
 	ex.wait.Add(1)
 	defer ex.wait.Done()
 
-	maxDuration := time.Second * 3
+	maxDuration := ex.cfg.CheckExpiredDuration
 	minDuration := time.Millisecond * 100
 	clean := func() time.Duration {
-		txns, err := ex.cfg.Store.FindEnded(context.Background(),
+		txns, err := ex.cfg.Store.CleanExpiredTxns(context.Background(),
 			txn, time.Now().Add(-1*ex.cfg.CleanExpired), ex.cfg.CleanLimit)
 		if err != nil {
 			return maxDuration

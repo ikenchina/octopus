@@ -121,7 +121,7 @@ func HandleCancel(ctx context.Context, db *gorm.DB, gtid string, branchID int, c
 			return err
 		}
 
-		return UpdateTransactionState(tx, gtid, branchID, define.TxnStateCommitted)
+		return UpdateTransactionState(tx, gtid, branchID, define.TxnStateAborted)
 	}, &sql.TxOptions{
 		Isolation: sql.LevelRepeatableRead,
 	})
