@@ -1,0 +1,40 @@
+{
+    "Node": {
+        "NodeId": 2,
+        "DataCenterId": 1
+    },
+    "HttpListen": ":8080",
+    "MaxConcurrentTask": 1,
+    "MaxConcurrentBranch": 1,
+    "Storages": {
+        "tcc": {
+            "Driver": "postgresql",
+            "Dsn": "postgresql://dtx_user:dtx_pass@127.0.0.1:5432/dtx?connect_timeout=3",
+            "Timeout": 1000000000
+        },
+        "saga": {
+            "Driver": "postgresql",
+            "Dsn": "postgresql://dtx_user:dtx_pass@127.0.0.1:5432/dtx?connect_timeout=3",
+            "Timeout": 1000000000
+        }
+    },
+    "Log": {
+        "level": "debug",
+        "development": true,
+        "disableCaller": false,
+        "disableStacktrace": false,
+        "encoding": "json",
+        "outputPaths": [
+            "stdout"
+        ],
+        "errorOutputPaths": [
+            "stderr"
+        ],
+        "encoderConfig": {
+            "messageKey": "msg",
+            "levelKey": "level",
+            "levelEncoder": "lowercase",
+            "SkipLineEnding": false
+        }
+    }
+}
