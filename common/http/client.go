@@ -3,7 +3,6 @@ package http
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"io/ioutil"
 	"net/http"
 	"strconv"
@@ -42,63 +41,74 @@ func Send(ctx context.Context, dc int, node int, txn string,
 	return resp.StatusCode, string(d), nil
 }
 
-func Get(ctx context.Context, gtid string, url string, body interface{}) (int, error) {
+func Get(ctx context.Context, gtid string, url string) ([]byte, int, error) {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
-		return 0, err
+		return []byte(""), 0, err
 	}
 
 	req = req.WithContext(ctx)
-	req.Header.Add(HTTP_HREADER_GID, gtid)
+	if len(gtid) != 0 {
+		req.Header.Add(HTTP_HREADER_GID, gtid)
+	}
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return 0, err
+		return []byte(""), 0, err
 	}
 	defer resp.Body.Close()
 
 	d, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return 0, err
+		return []byte(""), 0, err
 	}
-	return resp.StatusCode, json.Unmarshal(d, body)
+	return d, resp.StatusCode, nil
 }
 
-func Post(ctx context.Context, gtid string, url string, payload string) (int, error) {
+func Post(ctx context.Context, gtid string, url string, payload string) ([]byte, int, error) {
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBufferString(payload))
 	if err != nil {
-		return 0, err
+		return []byte(""), 0, err
 	}
 
 	req = req.WithContext(ctx)
 	req.Header.Add(HTTP_HREADER_GID, gtid)
-	resp, err := http.DefaultClient.Do(req)
+	hresp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return 0, err
+		return []byte(""), 0, err
 	}
-	defer resp.Body.Close()
-	return resp.StatusCode, nil
+	defer hresp.Body.Close()
+	d, err := ioutil.ReadAll(hresp.Body)
+	if err != nil {
+		return []byte(""), 0, err
+	}
+	return d, hresp.StatusCode, nil
 }
 
-func Put(ctx context.Context, gtid string, url string, payload string) (int, error) {
+func Put(ctx context.Context, gtid string, url string, payload string) ([]byte, int, error) {
 	req, err := http.NewRequest(http.MethodPut, url, bytes.NewBufferString(payload))
 	if err != nil {
-		return 0, err
+		return []byte(""), 0, err
 	}
 
 	req = req.WithContext(ctx)
 	req.Header.Add(HTTP_HREADER_GID, gtid)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return 0, err
+		return []byte(""), 0, err
 	}
 	defer resp.Body.Close()
-	return resp.StatusCode, nil
+	d, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return []byte(""), 0, err
+	}
+	return d, resp.StatusCode, nil
 }
 
-func Delete(ctx context.Context, gtid string, url string) (int, error) {
+func Delete(ctx context.Context, gtid string, url string) ([]byte, int, error) {
 	req, err := http.NewRequest(http.MethodDelete, url, nil)
 	if err != nil {
-		return 0, err
+		return []byte(""), 0, err
 	}
 
 	req = req.WithContext(ctx)
@@ -106,8 +116,12 @@ func Delete(ctx context.Context, gtid string, url string) (int, error) {
 	resp, err := http.DefaultClient.Do(req)
 
 	if err != nil {
-		return 0, err
+		return []byte(""), 0, err
 	}
 	defer resp.Body.Close()
-	return resp.StatusCode, nil
+	d, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return []byte(""), 0, err
+	}
+	return d, resp.StatusCode, nil
 }
