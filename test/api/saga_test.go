@@ -2,21 +2,19 @@ package test
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
-	"net/http"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/ikenchina/octopus/app/model"
+	saga_client "github.com/ikenchina/octopus/client/saga"
 	"github.com/ikenchina/octopus/common/errorutil"
 	shttp "github.com/ikenchina/octopus/common/http"
-	"github.com/ikenchina/octopus/config"
-	tc "github.com/ikenchina/octopus/service"
-	"github.com/ikenchina/octopus/service/saga"
+	"github.com/ikenchina/octopus/define"
+	"github.com/ikenchina/octopus/tc/config"
+	tc "github.com/ikenchina/octopus/tc/service"
 )
 
 func TestSagaSuite(t *testing.T) {
@@ -32,7 +30,27 @@ func (ss *_sagaSuite) TestCommit() {
 	ss.Nil(err)
 	na := <-ss.rm.notifyChan
 	ss.checkServersData(sr.Gtid, true, []bool{true, true, true})
-	ss.Equal(model.TxnStateCommitted, na.State)
+	ss.Equal(define.TxnStateCommitted, na.State)
+}
+
+func (ss *_sagaSuite) TestCommitWrapper() {
+	ss.runTc()
+	defer ss.stopTc()
+	sr, err := ss.rm.newSagaRequest()
+	ss.Nil(err)
+
+	_, err = saga_client.SagaTransaction(context.Background(), ss.rm.tcDomain, time.Now().Add(1*time.Minute), func(t *saga_client.Transaction, gtid string) error {
+		for i, bb := range sr.Branches {
+			t.NewBranch(i+1, bb.Commit.Action, bb.Compensation.Action, bb.Payload)
+		}
+		t.SetNotify(sr.Notify.Action, sr.Notify.Timeout, sr.Notify.Retry)
+		return nil
+	})
+	ss.Nil(err)
+
+	na := <-ss.rm.notifyChan
+	ss.checkServersData(sr.Gtid, true, []bool{true, true, true})
+	ss.Equal(define.TxnStateCommitted, na.State)
 }
 
 func (ss *_sagaSuite) TestRollback() {
@@ -48,7 +66,7 @@ func (ss *_sagaSuite) TestRollback() {
 	ss.checkServersData(sr.Gtid, false, []bool{true, true, true})
 	ss.checkServersData(sr.Gtid, true, []bool{true, true, false})
 
-	ss.Equal(model.TxnStateAborted, na.State)
+	ss.Equal(define.TxnStateAborted, na.State)
 }
 
 func (ss *_sagaSuite) TestRetryOk() {
@@ -68,7 +86,7 @@ func (ss *_sagaSuite) TestRetryOk() {
 	na := <-ss.rm.notifyChan
 	ss.checkServersData(sr.Gtid, true, []bool{true, true, true})
 	ss.checkServersData(sr.Gtid, false, []bool{false, false, false})
-	ss.Equal(model.TxnStateCommitted, na.State)
+	ss.Equal(define.TxnStateCommitted, na.State)
 }
 
 func (ss *_sagaSuite) TestCron() {
@@ -79,9 +97,9 @@ func (ss *_sagaSuite) TestCron() {
 	sr.Branches[1].Commit.Retry.MaxRetry = 1000
 	ss.rm.servers[1].timeout = 300 * time.Millisecond
 	go func() {
-		code, err := ss.commit(sr)
-		ss.Equal(http.StatusInternalServerError, code)
-		ss.NotNil(err)
+		resp, err := ss.commit(sr)
+		ss.Nil(err)
+		ss.Equal(define.TxnStatePrepared, resp.State)
 	}()
 	<-ss.rm.servers[1].commitChan
 	ss.stopTc()
@@ -90,14 +108,15 @@ func (ss *_sagaSuite) TestCron() {
 	na := <-ss.rm.notifyChan
 	ss.checkServersData(sr.Gtid, true, []bool{true, true, true})
 	ss.checkServersData(sr.Gtid, false, []bool{false, false, false})
-	ss.Equal(model.TxnStateCommitted, na.State)
+	ss.Equal(define.TxnStateCommitted, na.State)
 	ss.stopTc()
 }
 
 type _sagaSuite struct {
 	suite.Suite
-	rm *sagaRmMock
-	tc *tc.TcService
+	rm  *sagaRmMock
+	tc  *tc.TcService
+	cli saga_client.Client
 }
 
 func (ss *_sagaSuite) checkServersData(gtid string, commit bool, expected []bool) {
@@ -112,22 +131,13 @@ func (ss *_sagaSuite) checkServersData(gtid string, commit bool, expected []bool
 	}
 }
 
-func (ss *_sagaSuite) commit(sr *saga.SagaRequest) (int, error) {
-	body, _ := json.Marshal(sr)
-	code, err := shttp.Post(context.Background(), sr.Gtid, ss.rm.tcDomain+"/dtx/saga", string(body))
-	if err != nil {
-		return 0, err
-	}
-	if code < 200 || code >= 300 {
-		return code, fmt.Errorf("status code : %d", code)
-	}
-
-	return code, nil
+func (ss *_sagaSuite) commit(sr *define.SagaRequest) (*define.SagaResponse, error) {
+	return ss.cli.Commit(context.Background(), sr)
 }
 
-func (ss *_sagaSuite) get(id string) (*saga.SagaResponse, error) {
-	sr := &saga.SagaResponse{}
-	code, err := shttp.Get(context.Background(), id, fmt.Sprintf("%s/%s", ss.rm.tcDomain, id), sr)
+func (ss *_sagaSuite) get(id string) (*define.SagaResponse, error) {
+	sr := &define.SagaResponse{}
+	code, err := shttp.GetJson(context.Background(), id, fmt.Sprintf("%s/%s", ss.rm.tcDomain, id), sr)
 	if err != nil {
 		return nil, err
 	}
@@ -144,6 +154,9 @@ func (ss *_sagaSuite) runTc() {
 	errorutil.PanicIfError(config.InitConfig(*configFile))
 	ss.tc = tc.NewTc()
 	ss.rm = newSagaRm(3, ":8083")
+
+	ss.cli.TcServer = ss.rm.tcDomain
+
 	go ss.rm.start()
 	go ss.tc.Start()
 	time.Sleep(time.Second)

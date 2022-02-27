@@ -1,0 +1,47 @@
+{
+    "Gtid": "gtid_100",
+    "Business": "test_biz",
+    "Notify": {
+        "URL": "http://localhost:8082/notify",
+        "Timeout": 1000000000,
+        "Retry": 5000000000
+    },
+    "SagaCallType": "sync",
+    "SubTransactions": [
+        {
+            "Stid": "1",
+            "Url": "http://localhost:8083/user/gtid_100/1",
+            "Body": "{\"vip\":true}",
+            "Timeout": 1000000000,
+            "Retry": {
+                "MaxRetry": 1,
+                "Constant": {
+                    "Duration": 1000000000
+                }
+            },
+            "Compensation": {
+                "Url": "",
+                "Timeout": 0,
+                "Retry": 0
+            }
+        },
+        {
+            "Stid": "2",
+            "Url": "http://localhost:8084/chat/gtid_100/2",
+            "Body": "{\"vip\":true}",
+            "Timeout": 1000000000,
+            "Retry": {
+                "MaxRetry": 1,
+                "Constant": {
+                    "Duration": 1000000000
+                }
+            },
+            "Compensation": {
+                "Url": "",
+                "Timeout": 0,
+                "Retry": 0
+            }
+        }
+    ],
+    "ParallelExecution": false
+}

@@ -7,25 +7,27 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	saga_client "github.com/ikenchina/octopus/client/saga"
 	"github.com/ikenchina/octopus/common/errorutil"
-	shttp "github.com/ikenchina/octopus/common/http"
-	"github.com/ikenchina/octopus/service/saga"
+	"github.com/ikenchina/octopus/define"
 )
 
 type sagaRmMock struct {
 	*rmMock
-	notify     map[string]*saga.SagaResponse
-	requests   map[string]*saga.SagaRequest
-	notifyChan chan *saga.SagaResponse
+	notify     map[string]*define.SagaResponse
+	requests   map[string]*define.SagaRequest
+	notifyChan chan *define.SagaResponse
+	cli        saga_client.Client
 }
 
 func newSagaRm(server int, listen string) *sagaRmMock {
 	rm := &sagaRmMock{
-		notify:     make(map[string]*saga.SagaResponse),
-		requests:   make(map[string]*saga.SagaRequest),
-		notifyChan: make(chan *saga.SagaResponse, 10),
+		notify:     make(map[string]*define.SagaResponse),
+		requests:   make(map[string]*define.SagaRequest),
+		notifyChan: make(chan *define.SagaResponse, 10),
 	}
 	rm.rmMock = newRm("/dtx/saga", server, listen, rm)
+	rm.cli.TcServer = rm.tcDomain
 	return rm
 }
 
@@ -37,10 +39,10 @@ func (rm *sagaRmMock) notifyHandler() func(c *gin.Context) {
 		body, err := c.GetRawData()
 		errorutil.PanicIfError(err)
 
-		rs := &saga.SagaResponse{}
+		rs := &define.SagaResponse{}
 		err = json.Unmarshal(body, rs)
 		errorutil.PanicIfError(err)
-		gtid := c.Param("id")
+		gtid := c.Param("gtid")
 		rm.notify[gtid] = rs
 		rm.notifyChan <- rs
 	}
@@ -48,10 +50,15 @@ func (rm *sagaRmMock) notifyHandler() func(c *gin.Context) {
 
 func (rm *sagaRmMock) commitHandler(index int) func(c *gin.Context) {
 	return func(c *gin.Context) {
+	}
+}
+
+func (rm *sagaRmMock) actionHandler(index int) func(c *gin.Context) {
+	return func(c *gin.Context) {
 		defer errorutil.Recovery(func(i interface{}) {
 			c.JSON(500, i)
 		})
-		gtid := c.Param("id")
+		gtid := c.Param("gtid")
 		svr := rm.servers[index]
 		data, ok := svr.data[gtid]
 		if !ok {
@@ -73,7 +80,7 @@ func (rm *sagaRmMock) rollbackHandler(index int) func(c *gin.Context) {
 		defer errorutil.Recovery(func(i interface{}) {
 			c.JSON(500, i)
 		})
-		gtid := c.Param("id")
+		gtid := c.Param("gtid")
 		svr := rm.servers[index]
 		data, ok := svr.data[gtid]
 		if !ok {
@@ -90,42 +97,36 @@ func (rm *sagaRmMock) rollbackHandler(index int) func(c *gin.Context) {
 	}
 }
 
-func (rm *sagaRmMock) newSagaRequest() (*saga.SagaRequest, error) {
-	data := make(map[string]string)
-	code, err := shttp.Get(context.Background(), "", rm.tcDomain+rm.basePath+"/gtid", &data)
-	if code < 200 || code >= 300 {
-		return nil, fmt.Errorf("status code : %d", code)
-	}
+func (rm *sagaRmMock) newSagaRequest() (*define.SagaRequest, error) {
+	gtid, err := rm.cli.NewGtid(context.Background())
 	errorutil.PanicIfError(err)
-	gtid := data["gtid"]
-
-	req := &saga.SagaRequest{
+	req := &define.SagaRequest{
 		Gtid:       gtid,
 		Business:   "test",
 		ExpireTime: time.Now().Add(1 * time.Hour),
-		Notify: &saga.SagaNotify{
+		Notify: &define.SagaNotify{
 			Action:  rm.rmDomain + rm.basePath,
 			Timeout: time.Millisecond * 200,
 			Retry:   time.Millisecond * 200,
 		},
 	}
 	for i, svr := range rm.servers {
-		bid := fmt.Sprintf("%d", i)
-		req.Branches = append(req.Branches, saga.SagaBranch{
-			BranchId: bid,
+		bid := fmt.Sprintf("%d", i+1)
+		req.Branches = append(req.Branches, define.SagaBranch{
+			BranchId: i + 1,
 			Payload:  bid,
-			Commit: saga.SagaBranchCommit{
-				Action:  svr.commitUrl + "/" + gtid,
+			Commit: define.SagaBranchCommit{
+				Action:  fmt.Sprintf("%s/%s/%d", svr.commitUrl, gtid, i+1),
 				Timeout: time.Millisecond * 200,
-				Retry: saga.SagaRetry{
+				Retry: define.SagaRetry{
 					MaxRetry: 3,
-					Constant: &saga.RetryStrategyConstant{
+					Constant: &define.RetryStrategyConstant{
 						Duration: time.Millisecond * 200,
 					},
 				},
 			},
-			Compensation: saga.SagaBranchCompensation{
-				Action:  svr.rollbackUrl + "/" + gtid,
+			Compensation: define.SagaBranchCompensation{
+				Action:  fmt.Sprintf("%s/%s/%d", svr.commitUrl, gtid, i+1),
 				Timeout: time.Millisecond * 200,
 				Retry:   time.Millisecond * 200,
 			},
