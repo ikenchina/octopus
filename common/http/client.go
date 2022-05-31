@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	HTTP_HREADER_GID          = "DTX_GID"
+	HTTP_HREADER_GTID         = "DTX_GTID"
 	HTTP_HEADER_TC_DATACENTER = "DTX_TC_DATACENTER"
 	HTTP_HEADER_TC_NODE       = "DTX_TC_NODE"
 	HTTP_HEADER_TXN_TYPE      = "DTX_TXN_TYPE"
@@ -23,7 +23,7 @@ func Send(ctx context.Context, dc int, node int, txn string,
 		return 0, "", err
 	}
 	req = req.WithContext(ctx)
-	req.Header.Add(HTTP_HREADER_GID, gtid)
+	req.Header.Add(HTTP_HREADER_GTID, gtid)
 	req.Header.Add(HTTP_HEADER_TC_DATACENTER, strconv.Itoa(dc))
 	req.Header.Add(HTTP_HEADER_TC_NODE, strconv.Itoa(node))
 	req.Header.Add(HTTP_HEADER_TXN_TYPE, txn)
@@ -49,7 +49,7 @@ func Get(ctx context.Context, gtid string, url string) ([]byte, int, error) {
 
 	req = req.WithContext(ctx)
 	if len(gtid) != 0 {
-		req.Header.Add(HTTP_HREADER_GID, gtid)
+		req.Header.Add(HTTP_HREADER_GTID, gtid)
 	}
 
 	resp, err := http.DefaultClient.Do(req)
@@ -72,7 +72,7 @@ func Post(ctx context.Context, gtid string, url string, payload string) ([]byte,
 	}
 
 	req = req.WithContext(ctx)
-	req.Header.Add(HTTP_HREADER_GID, gtid)
+	req.Header.Add(HTTP_HREADER_GTID, gtid)
 	hresp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return []byte(""), 0, err
@@ -92,7 +92,7 @@ func Put(ctx context.Context, gtid string, url string, payload string) ([]byte, 
 	}
 
 	req = req.WithContext(ctx)
-	req.Header.Add(HTTP_HREADER_GID, gtid)
+	req.Header.Add(HTTP_HREADER_GTID, gtid)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return []byte(""), 0, err
@@ -112,7 +112,7 @@ func Delete(ctx context.Context, gtid string, url string) ([]byte, int, error) {
 	}
 
 	req = req.WithContext(ctx)
-	req.Header.Add(HTTP_HREADER_GID, gtid)
+	req.Header.Add(HTTP_HREADER_GTID, gtid)
 	resp, err := http.DefaultClient.Do(req)
 
 	if err != nil {

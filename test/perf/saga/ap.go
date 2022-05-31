@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"time"
 
@@ -11,7 +12,6 @@ import (
 	"gorm.io/gorm"
 
 	saga_cli "github.com/ikenchina/octopus/client/saga"
-	logutil "github.com/ikenchina/octopus/common/log"
 	"github.com/ikenchina/octopus/define"
 	saga_rm "github.com/ikenchina/octopus/test/utils/saga"
 )
@@ -20,10 +20,13 @@ func (app *Application) PayWage(employees []*saga_rm.BankAccountRecord) (*define
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 
-	notifyAction := fmt.Sprintf("http://localhost%s/saga/notify", app.listen)
+	host, port := extractListen(app.listen)
+	notifyAction := fmt.Sprintf("http://%s:%s/saga/notify", host, port)
 	transactionExpiredTime := time.Now().Add(1 * time.Minute)
+	maxTry := rand.Intn(10)
+	rmCount := len(config.Rm)
 
-	resp, err := saga_cli.SagaTransaction(ctx, tcDomain, transactionExpiredTime,
+	resp, err := saga_cli.SagaTransaction(ctx, config.Ap.TcDomain, transactionExpiredTime,
 		func(t *saga_cli.Transaction, gtid string) error {
 
 			app.saveGtidToDb(gtid)
@@ -33,11 +36,37 @@ func (app *Application) PayWage(employees []*saga_rm.BankAccountRecord) (*define
 
 			for i, employee := range employees {
 				branchID := i + 1
-				actionURL := fmt.Sprintf("%s%s/%s/%d", app.employeeHosts[employee.UserID], saga_rm.SagaRmBankServiceBasePath, gtid, branchID)
-				t.NewBranch(branchID, actionURL, actionURL, jsonMarshal(employee))
+				bizuser := employee.UserID
+				if bizuser < 0 {
+					bizuser *= -1
+				}
+				actionURL := fmt.Sprintf("%s%s/%s/%d",
+					app.employeeHosts[bizuser%rmCount], saga_rm.SagaRmBankServiceBasePath,
+					gtid, branchID)
+				payload := jsonMarshal(employee)
+				t.Request.Branches = append(t.Request.Branches, define.SagaBranch{
+					BranchId: branchID,
+					Payload:  payload,
+					Commit: define.SagaBranchCommit{
+						Action:  actionURL,
+						Timeout: time.Second,
+						Retry: define.SagaRetry{
+							MaxRetry: maxTry,
+							Constant: &define.RetryStrategyConstant{
+								Duration: time.Second,
+							},
+						},
+					},
+					Compensation: define.SagaBranchCompensation{
+						Action:  actionURL,
+						Timeout: time.Second,
+						Retry:   time.Second,
+					},
+				})
 			}
 			return nil
 		})
+
 	if err != nil {
 		return nil, err
 	}
@@ -48,27 +77,22 @@ func (app *Application) PayWage(employees []*saga_rm.BankAccountRecord) (*define
 func (app *Application) notifyHandler(c *gin.Context) {
 	// update database : distributed transaction is commited or aborted
 
-	body, err := c.GetRawData()
-	if err != nil {
-		c.AbortWithStatus(http.StatusBadRequest)
-		return
-	}
-	logutil.Logger(context.TODO()).Sugar().Debugf("notify : %s", string(body))
+	// body, err := c.GetRawData()
+	// if err != nil {
+	// 	c.AbortWithStatus(http.StatusBadRequest)
+	// 	return
+	// }
+	// logutil.Logger(context.TODO()).Sugar().Debugf("notify : %s", string(body))
 }
 
-var (
-	tcListen = ":8080"
-	tcDomain = fmt.Sprintf("http://localhost%s", tcListen)
-)
-
 type Application struct {
-	employeeHosts map[int]string
+	employeeHosts []string
 	listen        string
 	Db            *gorm.DB
 	httpServer    *http.Server
 }
 
-func (app *Application) start() error {
+func (app *Application) Start() error {
 	ginApp := gin.New()
 	ginApp.POST("/saga/notify", app.notifyHandler)
 	app.httpServer = &http.Server{

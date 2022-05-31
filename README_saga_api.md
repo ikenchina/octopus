@@ -42,7 +42,7 @@ GET http://octopus_domain/dtx/saga/gtid
 POST http://octopus_domain/dtx/saga $body
 ```
 
-请在HTTP头携带此`DTX_GID:gtid_125`header，方便负载均衡器将同一个事务的请求路由到同一个TC以减少事务的冲突概率。
+请在HTTP头携带此`DTX_GTID:gtid_125`header，方便负载均衡器将同一个事务的请求路由到同一个TC以减少事务的冲突概率。
 
 
 - body

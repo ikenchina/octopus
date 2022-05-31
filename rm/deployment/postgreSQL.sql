@@ -1,6 +1,6 @@
 # CREATE SCHEMA dtx;
 
-CREATE TYPE txn_state AS ENUM (
+CREATE TYPE dtx.txn_state AS ENUM (
     'prepared',
     'committing',
     'committed',
@@ -9,9 +9,9 @@ CREATE TYPE txn_state AS ENUM (
 );
 
 
-CREATE TABLE IF NOT ExISTS rmtransaction(
+CREATE TABLE IF NOT ExISTS dtx.rmtransaction(
 	gtid character varying(32) NOT NULL,
 	branch_id INT NOT NULL,
-	state txn_state DEFAULT 'prepared'::txn_state NOT NULL,
+	state dtx.txn_state DEFAULT 'prepared'::dtx.txn_state NOT NULL,
 	body TEXT
 );

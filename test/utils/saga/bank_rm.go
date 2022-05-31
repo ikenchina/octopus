@@ -1,4 +1,4 @@
-package main
+package saga
 
 import (
 	"encoding/json"
@@ -13,25 +13,32 @@ import (
 )
 
 var (
-	service_BasePath = "/paywage/saga"
+	SagaRmBankServiceBasePath = "/paywage/saga"
 )
 
-type AccountRecord struct {
+type BankAccountRecord struct {
 	UserID  int
 	Account int
+	Fail    bool
 }
 
-type RmService struct {
+type SagaRmBankService struct {
 	httpServer *http.Server
-	Db         *gorm.DB
 	listen     string
 	db         *gorm.DB
 }
 
-func (rm *RmService) start() error {
+func NewSagaRmBankService(listen string, db *gorm.DB) *SagaRmBankService {
+	return &SagaRmBankService{
+		listen: listen,
+		db:     db,
+	}
+}
+
+func (rm *SagaRmBankService) Start() error {
 	app := gin.New()
-	app.POST(service_BasePath+"/:gtid/:branch_id", rm.commitHandler)
-	app.DELETE(service_BasePath+"/:gtid/:branch_id", rm.compensationHandler)
+	app.POST(SagaRmBankServiceBasePath+"/:gtid/:branch_id", rm.commitHandler)
+	app.DELETE(SagaRmBankServiceBasePath+"/:gtid/:branch_id", rm.compensationHandler)
 	rm.httpServer = &http.Server{
 		Addr:    rm.listen,
 		Handler: app,
@@ -39,18 +46,24 @@ func (rm *RmService) start() error {
 	return rm.httpServer.ListenAndServe()
 }
 
-func (rm *RmService) commitHandler(c *gin.Context) {
+func (rm *SagaRmBankService) commitHandler(c *gin.Context) {
+
 	body, err := c.GetRawData()
 	if err != nil {
 		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
-	request := &AccountRecord{}
+	request := &BankAccountRecord{}
 	err = json.Unmarshal(body, request)
 	if err != nil {
 		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
+
+	if request.Fail {
+		c.AbortWithStatus(http.StatusInternalServerError)
+	}
+
 	gtid := c.Param("gtid")
 	branchID, _ := strconv.Atoi(c.Param("branch_id"))
 	code := http.StatusOK
@@ -58,9 +71,9 @@ func (rm *RmService) commitHandler(c *gin.Context) {
 	//
 	// execute in a transaction
 	//
-	err = sagarm.HandleCommit(rm.Db, gtid, branchID, string(body),
+	err = sagarm.HandleCommit(rm.db, gtid, branchID, string(body),
 		func(tx *gorm.DB) error {
-			txr := tx.Model(Account{}).Where("id=?", request.UserID).
+			txr := tx.Model(BankAccount{}).Where("id=?", request.UserID).
 				Update("balance", gorm.Expr("balance+?", request.Account))
 			if txr.Error != nil {
 				code = http.StatusInternalServerError
@@ -79,21 +92,21 @@ func (rm *RmService) commitHandler(c *gin.Context) {
 	}
 }
 
-func (rm *RmService) compensationHandler(c *gin.Context) {
+func (rm *SagaRmBankService) compensationHandler(c *gin.Context) {
 	gtid := c.Param("gtid")
 	branchID, _ := strconv.Atoi(c.Param("branch_id"))
 	code := http.StatusOK
 
-	err := sagarm.HandleCompensation(rm.Db, gtid, branchID,
+	err := sagarm.HandleCompensation(rm.db, gtid, branchID,
 		func(tx *gorm.DB, body string) error {
-			record := AccountRecord{}
+			record := BankAccountRecord{}
 			err := json.Unmarshal([]byte(body), &record)
 			if err != nil {
 				code = http.StatusBadRequest
 				return err
 			}
 
-			txr := tx.Model(Account{}).Where("id=?", record.UserID).
+			txr := tx.Model(BankAccount{}).Where("id=?", record.UserID).
 				Update("balance", gorm.Expr("balance+?", -1*record.Account))
 			if txr.Error != nil {
 				code = http.StatusInternalServerError
@@ -113,13 +126,13 @@ func (rm *RmService) compensationHandler(c *gin.Context) {
 	}
 }
 
-type Account struct {
+type BankAccount struct {
 	Id      int
 	Balance int
 	Freeze  int `gorm:"balance_freeze"`
 }
 
-func (*Account) TableName() string {
+func (*BankAccount) TableName() string {
 	return "dtx.account"
 }
 
