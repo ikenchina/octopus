@@ -9,7 +9,6 @@ import (
 	"math/rand"
 	"strings"
 	"sync"
-	"time"
 
 	"golang.org/x/time/rate"
 
@@ -20,6 +19,7 @@ import (
 
 	"github.com/ikenchina/octopus/common/errorutil"
 	logutil "github.com/ikenchina/octopus/common/log"
+	"github.com/ikenchina/octopus/common/metrics"
 	rmcommon "github.com/ikenchina/octopus/rm/common"
 	saga_rm "github.com/ikenchina/octopus/test/utils/saga"
 )
@@ -69,64 +69,11 @@ func startRm() {
 	wait.Wait()
 }
 
-type stats struct {
-	Start      time.Time
-	Err        int64
-	ErrLatency int64
-	Total      int64
-	OkLatency  int64
-	States     map[string]int64
-	mutex      sync.RWMutex
-}
-
-func (s *stats) IncrErr(start time.Time) {
-	s.mutex.Lock()
-	s.Err++
-	s.Total++
-	s.ErrLatency += int64(time.Since(start).Milliseconds())
-	s.mutex.Unlock()
-}
-
-func (s *stats) IncrState(state string, start time.Time) {
-	s.mutex.Lock()
-	s.States[state]++
-	s.Total++
-	s.OkLatency += int64(time.Since(start).Milliseconds())
-	s.mutex.Unlock()
-}
-
-func (s *stats) marshal() string {
-	s.mutex.RLock()
-	defer s.mutex.RUnlock()
-	d, _ := json.Marshal(s)
-	return string(d)
-}
-
-func (s *stats) qps() float64 {
-	s.mutex.RLock()
-	defer s.mutex.RUnlock()
-	ss := time.Since(s.Start).Seconds()
-	return float64(s.Total) / ss
-}
-
-func (s *stats) latency() (int64, int64) {
-	s.mutex.RLock()
-	defer s.mutex.RUnlock()
-	l1, l2 := int64(0), int64(0)
-	if s.Err != 0 {
-		l1 = s.ErrLatency / s.Err
-	}
-	if s.Total-s.Err != 0 {
-		l2 = s.OkLatency / (s.Total - s.Err)
-	}
-	return l1, l2
-}
+var (
+	apTimer = metrics.NewTimer("dtx", "ap", "ap timer", []string{"state", "ret"})
+)
 
 func ap() {
-	stat := stats{
-		States: make(map[string]int64),
-		Start:  time.Now(),
-	}
 
 	app := startAp()
 	ch := make(chan struct{}, config.Ap.Qps*2)
@@ -139,33 +86,28 @@ func ap() {
 	}()
 
 	consume := func() {
+		timer := apTimer.Timer()
 		wage := rand.Intn(100)
 		rr, _ := constructRecords(wage)
-		start := time.Now()
 		resp, err := app.PayWage(rr)
-
 		if err != nil {
-			stat.IncrErr(start)
-			fmt.Println(err)
+			timer("", "err")
 		} else {
-			stat.IncrState(resp.State, start)
+			timer(resp.State, "ok")
 		}
 	}
 
+	wait := sync.WaitGroup{}
 	for i := 0; i < config.Ap.Concurrency; i++ {
+		wait.Add(1)
 		go func() {
+			defer wait.Done()
 			for {
 				consume()
 			}
 		}()
 	}
-
-	for {
-		<-time.After(2 * time.Second)
-		e, o := stat.latency()
-		logutil.Logger(context.Background()).Sugar().Infof("stats : %s, QPS(%v), Err(%v ms), Ok(%v ms)",
-			stat.marshal(), stat.qps(), e, o)
-	}
+	wait.Wait()
 }
 
 func constructRecords(wage int) ([]*saga_rm.BankAccountRecord, bool) {
@@ -201,6 +143,9 @@ func startAp() *Application {
 	})
 	errorutil.PanicIfError(err)
 	app.Db = db
+	sdb, _ := db.DB()
+	sdb.SetMaxOpenConns(10)
+	sdb.SetMaxIdleConns(5)
 
 	go func() {
 		errorutil.PanicIfError(app.Start())

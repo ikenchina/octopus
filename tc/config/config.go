@@ -18,6 +18,8 @@ import (
 type StorageConfig struct {
 	Driver               string
 	Dsn                  string
+	MaxConnections       int
+	MaxIdleConnections   int
 	Timeout              time.Duration
 	CleanExpired         time.Duration
 	CleanLimit           int
@@ -30,11 +32,12 @@ type NodeConfig struct {
 }
 
 type Config struct {
-	Node              NodeConfig
-	HttpListen        string
-	MaxConcurrentTask int
-	Storages          map[string]StorageConfig
-	Log               zap.Config
+	Node                NodeConfig
+	HttpListen          string
+	MaxConcurrentTask   int
+	MaxConcurrentBranch int
+	Storages            map[string]StorageConfig
+	Log                 zap.Config
 }
 
 var (

@@ -4,12 +4,14 @@
         "DataCenterId": 1
     },
     "HttpListen": ":8080",
-    "MaxConcurrentTask": 100,
-    "MaxConcurrentBranch": 1000,
+    "MaxConcurrentTask": 10000,
+    "MaxConcurrentBranch": 100,
     "Storages": {
         "tcc": {
             "Driver": "postgresql",
             "Dsn": "postgresql://dtx_user:dtx_pass@127.0.0.1:5432/dtx?connect_timeout=3",
+            "MaxConnections": 5,
+            "MaxIdleConnections": 5,
             "Timeout": 1000000000,
             "CleanExpired": 100000000000
         },
@@ -17,6 +19,8 @@
             "Driver": "postgresql",
             "Dsn": "postgresql://dtx_user:dtx_pass@127.0.0.1:5432/dtx?connect_timeout=3",
             "Timeout": 1000000000,
+            "MaxConnections": 5,
+            "MaxIdleConnections": 5,
             "CleanExpired": 100000000000
         }
     },

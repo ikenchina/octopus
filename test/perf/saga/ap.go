@@ -8,7 +8,9 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gin-contrib/pprof"
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"gorm.io/gorm"
 
 	saga_cli "github.com/ikenchina/octopus/client/saga"
@@ -95,6 +97,8 @@ type Application struct {
 func (app *Application) Start() error {
 	ginApp := gin.New()
 	ginApp.POST("/saga/notify", app.notifyHandler)
+	ginApp.GET("/debug/metrics", gin.WrapH(promhttp.Handler()))
+	pprof.Register(ginApp, "debug/pprof")
 	app.httpServer = &http.Server{
 		Addr:    app.listen,
 		Handler: ginApp,

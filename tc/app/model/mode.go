@@ -56,9 +56,10 @@ type modelStorage struct {
 	defaultTxOpt *sql.TxOptions
 }
 
-func NewModelStorage(driver string, dsn string, timeout time.Duration, lessee string) (ModelStorage, error) {
+func NewModelStorage(driver string, dsn string,
+	timeout time.Duration, maxConn int, MaxIdleConn int,
+	lessee string) (ModelStorage, error) {
 	store := &modelStorage{}
-
 	switch driver {
 	case "postgresql":
 		db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
@@ -69,7 +70,12 @@ func NewModelStorage(driver string, dsn string, timeout time.Duration, lessee st
 			return nil, err
 		}
 		store.Db = db
-
+		sdb, err := db.DB()
+		if err != nil {
+			return nil, err
+		}
+		sdb.SetMaxOpenConns(maxConn)
+		sdb.SetMaxIdleConns(MaxIdleConn)
 	default:
 		return nil, errors.New("unknown driver")
 	}

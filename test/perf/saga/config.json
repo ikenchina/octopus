@@ -2,14 +2,14 @@
     "Ap": {
         "Listen": ":8090",
         "Dsn": "postgresql://dtx_user:dtx_pass@127.0.0.1:5432/dtx?connect_timeout=3",
-        "Qps": 1,
-        "Concurrency": 1,
+        "Qps": 30,
+        "Concurrency": 10,
         "UserRange": [
             1,
             100000
         ],
-        "SagaSize": 10,
-        "FailRate": 0.1,
+        "SagaSize": 5,
+        "FailRate": 0,
         "TcDomain": "http://localhost:8080"
     },
     "Rm": [

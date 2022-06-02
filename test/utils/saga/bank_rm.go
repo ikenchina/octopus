@@ -7,13 +7,17 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"gorm.io/gorm"
 
+	"github.com/ikenchina/octopus/common/metrics"
 	sagarm "github.com/ikenchina/octopus/rm/saga"
 )
 
 var (
 	SagaRmBankServiceBasePath = "/paywage/saga"
+
+	rmExecTimer = metrics.NewTimer("dtx", "rm_txn", "rm timer", []string{"branch"})
 )
 
 type BankAccountRecord struct {
@@ -39,6 +43,7 @@ func (rm *SagaRmBankService) Start() error {
 	app := gin.New()
 	app.POST(SagaRmBankServiceBasePath+"/:gtid/:branch_id", rm.commitHandler)
 	app.DELETE(SagaRmBankServiceBasePath+"/:gtid/:branch_id", rm.compensationHandler)
+	app.GET("/debug/metrics", gin.WrapH(promhttp.Handler()))
 	rm.httpServer = &http.Server{
 		Addr:    rm.listen,
 		Handler: app,
@@ -47,6 +52,8 @@ func (rm *SagaRmBankService) Start() error {
 }
 
 func (rm *SagaRmBankService) commitHandler(c *gin.Context) {
+
+	defer rmExecTimer.Timer()("commit")
 
 	body, err := c.GetRawData()
 	if err != nil {
@@ -93,6 +100,9 @@ func (rm *SagaRmBankService) commitHandler(c *gin.Context) {
 }
 
 func (rm *SagaRmBankService) compensationHandler(c *gin.Context) {
+
+	defer rmExecTimer.Timer()("compensation")
+
 	gtid := c.Param("gtid")
 	branchID, _ := strconv.Atoi(c.Param("branch_id"))
 	code := http.StatusOK

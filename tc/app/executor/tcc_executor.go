@@ -14,8 +14,8 @@ import (
 )
 
 var (
-	tccExecTimer = metrics.NewTimer("dtx", "tcc", "tcc timer", []string{"branch"})
-	tccGauge     = metrics.NewGaugeVec("dtx", "tcc", "in flight tccs", []string{"state"})
+	tccBranchTimer = metrics.NewTimer("dtx", "tcc_branch", "tcc branch timer", []string{"branch"})
+	tccGauge       = metrics.NewGaugeVec("dtx", "tcc", "in flight tccs", []string{"state"})
 )
 
 type TccExecutor struct {
@@ -278,7 +278,7 @@ func (te *TccExecutor) action(tcc *actionTask, branch *model.Branch) (string, er
 	ctx, cancel := context.WithTimeout(tcc.Ctx, branch.Timeout)
 	defer cancel()
 
-	timer := tccExecTimer.Timer()
+	timer := tccBranchTimer.Timer()
 
 	nf := NewActionNotify(ctx, tcc.Txn, branch.BranchType, branch.Action, branch.Payload)
 

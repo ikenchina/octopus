@@ -28,7 +28,7 @@ type _Suite struct {
 }
 
 func (s *_Suite) TestSave() {
-	ms, err := NewModelStorage(s.driver, s.dsn, s.timeout, s.lessee)
+	ms, err := NewModelStorage(s.driver, s.dsn, s.timeout, 1, 1, s.lessee)
 	s.Nil(err)
 
 	saga := s.newSagaTxn(2)
@@ -46,7 +46,7 @@ func (s *_Suite) TestSave() {
 }
 
 func (s *_Suite) TestExist() {
-	ms, err := NewModelStorage(s.driver, s.dsn, s.timeout, s.lessee)
+	ms, err := NewModelStorage(s.driver, s.dsn, s.timeout, 1, 1, s.lessee)
 	s.Nil(err)
 
 	saga := s.newSagaTxn(2)
@@ -62,7 +62,7 @@ func (s *_Suite) TestExist() {
 }
 
 func (s *_Suite) TestUpdate() {
-	ms, err := NewModelStorage(s.driver, s.dsn, s.timeout, s.lessee)
+	ms, err := NewModelStorage(s.driver, s.dsn, s.timeout, 1, 1, s.lessee)
 	s.Nil(err)
 
 	// invalid lease
@@ -94,7 +94,7 @@ func (s *_Suite) TestUpdate() {
 }
 
 func (s *_Suite) TestUpdateInvalidLessee() {
-	ms, err := NewModelStorage(s.driver, s.dsn, s.timeout, s.lessee)
+	ms, err := NewModelStorage(s.driver, s.dsn, s.timeout, 1, 1, s.lessee)
 	s.Nil(err)
 
 	saga := s.newSagaTxn(2)
@@ -110,7 +110,7 @@ func (s *_Suite) TestUpdateInvalidLessee() {
 }
 
 func (s *_Suite) TestUpdateBranch() {
-	ms, err := NewModelStorage(s.driver, s.dsn, s.timeout, s.lessee)
+	ms, err := NewModelStorage(s.driver, s.dsn, s.timeout, 1, 1, s.lessee)
 	s.Nil(err)
 
 	// invalid lease
@@ -136,7 +136,7 @@ func (s *_Suite) TestUpdateBranch() {
 }
 
 func (s *_Suite) TestQueryNotExist() {
-	ms, err := NewModelStorage(s.driver, s.dsn, s.timeout, s.lessee)
+	ms, err := NewModelStorage(s.driver, s.dsn, s.timeout, 1, 1, s.lessee)
 	s.Nil(err)
 
 	saga, err := ms.GetByGtid(context.Background(), "test_gtid_invalid")
@@ -147,7 +147,7 @@ func (s *_Suite) TestQueryNotExist() {
 func (s *_Suite) TestFindExpired() {
 	states := []string{TxnStatePrepared, TxnStateFailed, TxnStateCommitting}
 
-	ms, err := NewModelStorage(s.driver, s.dsn, s.timeout, s.lessee)
+	ms, err := NewModelStorage(s.driver, s.dsn, s.timeout, 1, 1, s.lessee)
 	s.Nil(err)
 	var ts Txns
 	for i := 0; i < 10; i++ {
@@ -200,7 +200,7 @@ func (s *_Suite) TestFindExpired() {
 func (s *_Suite) TestFindLeaseExpired() {
 	states := []string{TxnStatePrepared, TxnStateFailed, TxnStateCommitting}
 
-	ms, err := NewModelStorage(s.driver, s.dsn, s.timeout, s.lessee)
+	ms, err := NewModelStorage(s.driver, s.dsn, s.timeout, 1, 1, s.lessee)
 	s.Nil(err)
 	var ts Txns
 	for i := 0; i < 10; i++ {
@@ -253,7 +253,7 @@ func (s *_Suite) TestFindLeaseExpired() {
 func (s *_Suite) TestGrantLease() {
 	states := []string{TxnStatePrepared, TxnStateFailed, TxnStateCommitting}
 
-	ms, err := NewModelStorage(s.driver, s.dsn, s.timeout, s.lessee)
+	ms, err := NewModelStorage(s.driver, s.dsn, s.timeout, 1, 1, s.lessee)
 	s.Nil(err)
 	var ts Txns
 	for i := 0; i < 10; i++ {
@@ -284,7 +284,7 @@ func (s *_Suite) TestGrantLease() {
 
 func (s *_Suite) TestUpdateConditions() {
 
-	ms, err := NewModelStorage(s.driver, s.dsn, s.timeout, s.lessee)
+	ms, err := NewModelStorage(s.driver, s.dsn, s.timeout, 1, 1, s.lessee)
 	s.Nil(err)
 
 	// invalid lease
@@ -320,7 +320,7 @@ func (s *_Suite) TestUpdateConditions() {
 
 func (s *_Suite) TestRegisterBranches() {
 
-	ms, err := NewModelStorage(s.driver, s.dsn, s.timeout, s.lessee)
+	ms, err := NewModelStorage(s.driver, s.dsn, s.timeout, 1, 1, s.lessee)
 	s.Nil(err)
 
 	txn := s.newSagaTxn(2)
@@ -347,7 +347,7 @@ func (s *_Suite) TestRegisterBranches() {
 }
 
 func (s *_Suite) TestGrantLeaseIncBranch() {
-	ms, err := NewModelStorage(s.driver, s.dsn, s.timeout, s.lessee)
+	ms, err := NewModelStorage(s.driver, s.dsn, s.timeout, 1, 1, s.lessee)
 	s.Nil(err)
 	txn := s.newSagaTxn(2)
 	s.Nil(ms.Save(context.TODO(), txn))
@@ -361,7 +361,7 @@ func (s *_Suite) TestGrantLeaseIncBranch() {
 }
 
 func (s *_Suite) TestFindEnded() {
-	ms, err := NewModelStorage(s.driver, s.dsn, s.timeout, s.lessee)
+	ms, err := NewModelStorage(s.driver, s.dsn, s.timeout, 1, 1, s.lessee)
 	s.Nil(err)
 	states := []string{TxnStateAborted, TxnStateCommitted}
 

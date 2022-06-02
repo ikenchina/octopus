@@ -13,8 +13,8 @@ import (
 )
 
 var (
-	sagaExecTimer = metrics.NewTimer("dtx", "saga_txn", "saga timer", []string{"branch"})
-	sagaGauge     = metrics.NewGaugeVec("dtx", "saga_txn", "in flight sagas", []string{"state"})
+	sagaBranchTimer = metrics.NewTimer("dtx", "saga_branch", "saga branch timer", []string{"branch"})
+	sagaGauge       = metrics.NewGaugeVec("dtx", "saga_txn", "in flight sagas", []string{"state"})
 )
 
 // SagaExecutor
@@ -334,7 +334,7 @@ func (se *SagaExecutor) rollbackBranch(task *actionTask, branch *model.Branch) e
 func (se *SagaExecutor) processBranch(task *actionTask, branch *model.Branch) (resp string, err error) {
 	ctx, cancel := context.WithTimeout(task.Ctx, branch.Timeout)
 	defer cancel()
-	defer sagaExecTimer.Timer()(branch.BranchType)
+	defer sagaBranchTimer.Timer()(branch.BranchType)
 
 	nf := NewActionNotify(ctx, task.Txn, branch.BranchType, branch.Action, branch.Payload)
 	se.notifyChan <- nf
@@ -347,7 +347,6 @@ func (se *SagaExecutor) processBranch(task *actionTask, branch *model.Branch) (r
 	case <-se.closeChan:
 		err = ErrExecutorClosed
 	}
-
 	return
 }
 
@@ -355,7 +354,7 @@ func (se *SagaExecutor) notify(task *actionTask) (err error) {
 	if !task.NeedNotify() {
 		return nil
 	}
-	defer sagaExecTimer.Timer()("notify")
+	defer sagaBranchTimer.Timer()("notify")
 
 	ctx, cancel := context.WithTimeout(task.Ctx, task.Txn.NotifyTimeout)
 	defer cancel()
