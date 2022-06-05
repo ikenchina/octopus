@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS dtx.branch_action(
     try_count INT DEFAULT 0,
     state dtx.txn_state DEFAULT 'prepared'::dtx.txn_state NOT NULL,
     updated_time TIMESTAMP WITH TIME ZONE,
-	created_time TIMESTAMP WITH TIME ZONE
+	created_time TIMESTAMP WITH TIME ZONE,
+    CONSTRAINT gtid_bid_type_branch_action UNIQUE (gtid, bid, branch_type)
 );
 CREATE INDEX branch_action_gtid_idx ON dtx.branch_action(gtid);

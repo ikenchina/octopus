@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -17,6 +16,7 @@ import (
 	"github.com/ikenchina/octopus/define"
 	"github.com/ikenchina/octopus/tc/app/executor"
 	"github.com/ikenchina/octopus/tc/app/model"
+	"github.com/ikenchina/octopus/tc/config"
 )
 
 type TccService struct {
@@ -27,21 +27,17 @@ type TccService struct {
 }
 
 type Config struct {
-	NodeId               int
-	DataCenterId         int
-	Driver               string
-	Dsn                  string
-	Timeout              time.Duration
-	MaxConcurrentTask    int
-	Lessee               string
-	MaxConcurrentBranch  int
-	CleanExpired         time.Duration
-	CleanLimit           int
-	CheckExpiredDuration time.Duration
+	NodeId              int
+	DataCenterId        int
+	Store               config.StorageConfig
+	MaxConcurrentTask   int
+	Lessee              string
+	MaxConcurrentBranch int
 }
 
 func NewTccService(cfg Config) (*TccService, error) {
-	store, err := model.NewModelStorage(cfg.Driver, cfg.Dsn, cfg.Timeout, cfg.Lessee)
+	store, err := model.NewModelStorage(cfg.Store.Driver, cfg.Store.Dsn, cfg.Store.Timeout,
+		cfg.Store.MaxConnections, cfg.Store.MaxIdleConnections, cfg.Lessee)
 	if err != nil {
 		return nil, err
 	}
@@ -50,9 +46,9 @@ func NewTccService(cfg Config) (*TccService, error) {
 		Store:                store,
 		MaxConcurrency:       cfg.MaxConcurrentTask,
 		Lessee:               cfg.Lessee,
-		CleanExpired:         cfg.CleanExpired,
-		CleanLimit:           cfg.CleanLimit,
-		CheckExpiredDuration: cfg.CheckExpiredDuration,
+		CleanExpired:         cfg.Store.CleanExpired,
+		CleanLimit:           cfg.Store.CleanLimit,
+		CheckExpiredDuration: cfg.Store.CheckExpiredDuration,
 	})
 	if err != nil {
 		return nil, err

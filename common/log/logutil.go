@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 type ctxKeyType int
@@ -33,4 +34,23 @@ func Sync() error {
 func newDefaultStdLogger() *zap.Logger {
 	lg, _ := zap.NewProduction()
 	return lg
+}
+
+func InitLog(cfg *zap.Config) error {
+	cfg.EncoderConfig.TimeKey = "time"
+	cfg.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	cfg.EncoderConfig.CallerKey = "caller"
+	cfg.EncoderConfig.EncodeCaller = zapcore.ShortCallerEncoder
+	cfg.EncoderConfig.StacktraceKey = "stacktrace"
+	cfg.EncoderConfig.LineEnding = zapcore.DefaultLineEnding
+	cfg.EncoderConfig.EncodeDuration = zapcore.SecondsDurationEncoder
+	cfg.EncoderConfig.EncodeLevel = zapcore.LowercaseLevelEncoder
+
+	logger, err := cfg.Build()
+	if err != nil {
+		return err
+	}
+
+	SetLogger(logger)
+	return nil
 }

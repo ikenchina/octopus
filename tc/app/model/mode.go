@@ -56,9 +56,10 @@ type modelStorage struct {
 	defaultTxOpt *sql.TxOptions
 }
 
-func NewModelStorage(driver string, dsn string, timeout time.Duration, lessee string) (ModelStorage, error) {
+func NewModelStorage(driver string, dsn string,
+	timeout time.Duration, maxConn int, MaxIdleConn int,
+	lessee string) (ModelStorage, error) {
 	store := &modelStorage{}
-
 	switch driver {
 	case "postgresql":
 		db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
@@ -69,7 +70,12 @@ func NewModelStorage(driver string, dsn string, timeout time.Duration, lessee st
 			return nil, err
 		}
 		store.Db = db
-
+		sdb, err := db.DB()
+		if err != nil {
+			return nil, err
+		}
+		sdb.SetMaxOpenConns(maxConn)
+		sdb.SetMaxIdleConns(MaxIdleConn)
 	default:
 		return nil, errors.New("unknown driver")
 	}
@@ -294,7 +300,7 @@ func (ms *modelStorage) UpdateConditions(ctx context.Context, txn *Txn, cb func(
 			}
 		}
 		return nil
-	})
+	}, ms.defaultTxOpt)
 
 	if err == nil {
 		txn.EndSave()
@@ -315,7 +321,7 @@ func (ms *modelStorage) GrantLease(ctx context.Context, txn *Txn) error {
 			return ErrInvalidLessee
 		}
 		return nil
-	})
+	}, ms.defaultTxOpt)
 	return err
 }
 
@@ -343,7 +349,7 @@ func (ms *modelStorage) GrantLeaseIncBranch(ctx context.Context, txn *Txn, branc
 		dbBranch := &Branch{}
 		tx.Model(Branch{}).Where("id=?", branch.Id).Find(&dbBranch)
 		return txr.Error
-	})
+	}, ms.defaultTxOpt)
 	return err
 }
 
@@ -381,7 +387,7 @@ func (ms *modelStorage) Update(ctx context.Context, txn *Txn) error {
 			}
 		}
 		return nil
-	})
+	}, ms.defaultTxOpt)
 
 	if err == nil {
 		txn.EndSave()
@@ -413,7 +419,7 @@ func (ms *modelStorage) UpdateBranch(ctx context.Context, branch *Branch) error 
 			return ErrNotExist
 		}
 		return nil
-	})
+	}, ms.defaultTxOpt)
 
 	if err == nil {
 		branch.EndSave()
@@ -457,7 +463,7 @@ func (ms *modelStorage) UpdateBranchConditions(ctx context.Context, branch *Bran
 			return ErrNotExist
 		}
 		return nil
-	})
+	}, ms.defaultTxOpt)
 
 	if err == nil {
 		branch.EndSave()

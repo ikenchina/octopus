@@ -3,6 +3,7 @@ package executor
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -303,7 +304,8 @@ func (ex *baseExecutor) saveState(task *actionTask, srcStates []string, state st
 	task.SetState(state)
 	err := ex.cfg.Store.UpdateConditions(task.Ctx, task.Txn, func(oldTxn *model.Txn) error {
 		if !slice.Contain(srcStates, oldTxn.State) {
-			return ErrInvalidState
+			return fmt.Errorf("src(%v), old(%v)", srcStates, oldTxn.State)
+			//return ErrInvalidState
 		}
 		return nil
 	})
@@ -331,7 +333,10 @@ func (ex *baseExecutor) schedule(task *actionTask, after time.Duration) {
 			task.finish(ErrTimeout)
 			return
 		}
-		ex.queueTask(task)
+		err := ex.queueTask(task)
+		if err != nil {
+			ex.finishTask(task, err)
+		}
 	})
 }
 

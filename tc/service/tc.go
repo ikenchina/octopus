@@ -49,16 +49,12 @@ func NewTc() *TcService {
 	sagaCfg, ok := cfg.Storages["saga"]
 	equalPanic(!ok, "saga storage configuration does not exist")
 	tc.sagaService, err = saga.NewSagaService(saga.Config{
-		NodeId:               cfg.Node.NodeId,
-		DataCenterId:         cfg.Node.DataCenterId,
-		Driver:               sagaCfg.Driver,
-		Dsn:                  sagaCfg.Dsn,
-		Timeout:              sagaCfg.Timeout,
-		MaxConcurrentTask:    cfg.MaxConcurrentTask,
-		Lessee:               lessee,
-		CleanExpired:         sagaCfg.CleanExpired,
-		CleanLimit:           sagaCfg.CleanLimit,
-		CheckExpiredDuration: sagaCfg.CheckExpiredDuration,
+		NodeId:              cfg.Node.NodeId,
+		DataCenterId:        cfg.Node.DataCenterId,
+		Store:               sagaCfg,
+		MaxConcurrentTask:   cfg.MaxConcurrentTask,
+		MaxConcurrentBranch: cfg.MaxConcurrentBranch,
+		Lessee:              lessee,
 	})
 	errorutil.PanicIfError(err)
 
@@ -66,15 +62,11 @@ func NewTc() *TcService {
 	tccCfg, ok := cfg.Storages["tcc"]
 	equalPanic(!ok, "tcc storage configuration does not exist")
 	tc.tccService, err = tcc.NewTccService(tcc.Config{
-		NodeId:               cfg.Node.NodeId,
-		DataCenterId:         cfg.Node.DataCenterId,
-		Driver:               tccCfg.Driver,
-		Dsn:                  tccCfg.Dsn,
-		Timeout:              tccCfg.Timeout,
-		MaxConcurrentTask:    cfg.MaxConcurrentTask,
-		CleanExpired:         tccCfg.CleanExpired,
-		CleanLimit:           tccCfg.CleanLimit,
-		CheckExpiredDuration: sagaCfg.CheckExpiredDuration,
+		NodeId:              cfg.Node.NodeId,
+		DataCenterId:        cfg.Node.DataCenterId,
+		Store:               tccCfg,
+		MaxConcurrentTask:   cfg.MaxConcurrentTask,
+		MaxConcurrentBranch: cfg.MaxConcurrentBranch,
 	})
 	errorutil.PanicIfError(err)
 

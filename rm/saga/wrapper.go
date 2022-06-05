@@ -33,11 +33,11 @@ func HandleCommit(db *gorm.DB, gtid string, branchID int, requestBody string, co
 			return err
 		}
 
-		txr := tx.Model(RmTransaction{}).Create(RmTransaction{
-			Gtid:  gtid,
-			Bid:   branchID,
-			State: define.TxnStateCommitted,
-			Body:  requestBody,
+		txr := tx.Model(RmTransaction{}).Create(&RmTransaction{
+			Gtid:    gtid,
+			Bid:     branchID,
+			State:   define.TxnStateCommitted,
+			Payload: requestBody,
 		})
 		return txr.Error
 	}, &sql.TxOptions{
@@ -47,6 +47,7 @@ func HandleCommit(db *gorm.DB, gtid string, branchID int, requestBody string, co
 	return err
 }
 
+// @todo add context
 func HandleCompensation(db *gorm.DB, gtid string, branchID int, compensate func(*gorm.DB, string) error) error {
 
 	err := db.Transaction(func(tx *gorm.DB) error {
@@ -56,8 +57,12 @@ func HandleCompensation(db *gorm.DB, gtid string, branchID int, compensate func(
 			return err
 		}
 
-		if txn == nil {
-			txr := tx.Model(RmTransaction{}).Create(RmTransaction{
+		if txn != nil {
+			if txn.State == define.TxnStateAborted {
+				return nil
+			}
+		} else {
+			txr := tx.Model(RmTransaction{}).Create(&RmTransaction{
 				Gtid:  gtid,
 				Bid:   branchID,
 				State: define.TxnStateAborted,
@@ -66,7 +71,7 @@ func HandleCompensation(db *gorm.DB, gtid string, branchID int, compensate func(
 		}
 
 		// execute try
-		err = compensate(tx, txn.Body)
+		err = compensate(tx, txn.Payload)
 		if err != nil {
 			return err
 		}

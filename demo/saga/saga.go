@@ -12,6 +12,7 @@ import (
 	"github.com/ikenchina/octopus/common/errorutil"
 	logutil "github.com/ikenchina/octopus/common/log"
 	rmcommon "github.com/ikenchina/octopus/rm/common"
+	saga_rm "github.com/ikenchina/octopus/test/utils/saga"
 )
 
 var (
@@ -27,10 +28,12 @@ func main() {
 
 	resp, err := app.PayWage(constructRecords())
 	logutil.Logger(context.Background()).Sugar().Debugf("pay wages : %v %v", resp, err)
+	app.PayWage(constructRecords())
+	app.PayWage(constructRecords())
 }
 
-func constructRecords() []*AccountRecord {
-	records := []*AccountRecord{}
+func constructRecords() []*saga_rm.BankAccountRecord {
+	records := []*saga_rm.BankAccountRecord{}
 	employeeCount := 5
 	wage := 10
 
@@ -38,20 +41,17 @@ func constructRecords() []*AccountRecord {
 		port := portStart + i
 		host := fmt.Sprintf("http://localhost:%d", port)
 		app.employeeHosts[i] = host
-		rm := &RmService{
-			listen: fmt.Sprintf(":%v", port),
-			Db:     app.Db,
-		}
+		rm := saga_rm.NewSagaRmBankService(fmt.Sprintf(":%v", port), app.Db)
 		go func() {
-			errorutil.PanicIfError(rm.start())
+			errorutil.PanicIfError(rm.Start())
 		}()
 		if i == 0 {
-			records = append(records, &AccountRecord{
+			records = append(records, &saga_rm.BankAccountRecord{
 				UserID:  i, // account of company
 				Account: -1 * (employeeCount - 1) * wage,
 			})
 		} else { // employees' account
-			records = append(records, &AccountRecord{
+			records = append(records, &saga_rm.BankAccountRecord{
 				UserID:  i,
 				Account: wage,
 			})

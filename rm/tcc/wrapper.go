@@ -35,11 +35,11 @@ func HandleTry(db *gorm.DB, gtid string, branchID int, tryBody string, try func(
 			return err
 		}
 
-		txr := tx.Model(RmTransaction{}).Create(RmTransaction{
-			Gtid:  gtid,
-			Bid:   branchID,
-			State: define.TxnStatePrepared,
-			Body:  tryBody,
+		txr := tx.Model(RmTransaction{}).Create(&RmTransaction{
+			Gtid:    gtid,
+			Bid:     branchID,
+			State:   define.TxnStatePrepared,
+			Payload: tryBody,
 		})
 		return txr.Error
 	}, &sql.TxOptions{
@@ -74,12 +74,14 @@ func HandleConfirm(db *gorm.DB, gtid string, branchID int,
 			return ErrTxnNotPrepared
 		}
 
-		err = confirm(tx, txn.Body)
+		err = confirm(tx, txn.Payload)
 		if err != nil {
 			return err
 		}
 
 		return UpdateTransactionState(tx, gtid, branchID, define.TxnStateCommitted)
+	}, &sql.TxOptions{
+		Isolation: sql.LevelRepeatableRead,
 	})
 	return err
 }
@@ -113,7 +115,7 @@ func HandleCancel(db *gorm.DB, gtid string, branchID int, cancel func(stx *gorm.
 			return nil
 		}
 
-		err = cancel(tx, txn.Body)
+		err = cancel(tx, txn.Payload)
 		if err != nil {
 			return err
 		}

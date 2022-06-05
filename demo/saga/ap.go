@@ -13,9 +13,10 @@ import (
 	saga_cli "github.com/ikenchina/octopus/client/saga"
 	logutil "github.com/ikenchina/octopus/common/log"
 	"github.com/ikenchina/octopus/define"
+	saga_rm "github.com/ikenchina/octopus/test/utils/saga"
 )
 
-func (app *Application) PayWage(employees []*AccountRecord) (*define.SagaResponse, error) {
+func (app *Application) PayWage(employees []*saga_rm.BankAccountRecord) (*define.SagaResponse, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 
@@ -32,12 +33,14 @@ func (app *Application) PayWage(employees []*AccountRecord) (*define.SagaRespons
 
 			for i, employee := range employees {
 				branchID := i + 1
-				actionURL := fmt.Sprintf("%s%s/%s/%d", app.employeeHosts[employee.UserID], service_BasePath, gtid, branchID)
+				actionURL := fmt.Sprintf("%s%s/%s/%d", app.employeeHosts[employee.UserID], saga_rm.SagaRmBankServiceBasePath, gtid, branchID)
 				t.NewBranch(branchID, actionURL, actionURL, jsonMarshal(employee))
 			}
 			return nil
 		})
-
+	if err != nil {
+		return nil, err
+	}
 	app.updateTccStateToDb(resp.Gtid, resp.State)
 	return resp, err
 }
@@ -83,7 +86,7 @@ func (app *Application) saveGtidToDb(gtid string) {
 func (app *Application) updateTccStateToDb(gtid string, state string) {
 }
 
-func jsonMarshal(user *AccountRecord) string {
+func jsonMarshal(user *saga_rm.BankAccountRecord) string {
 	b, _ := json.Marshal(user)
 	return string(b)
 }

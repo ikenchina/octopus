@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ikenchina/octopus/common/errorutil"
+	logutil "github.com/ikenchina/octopus/common/log"
 	"github.com/ikenchina/octopus/common/metrics"
 	"github.com/ikenchina/octopus/common/operator"
 	"github.com/ikenchina/octopus/common/slice"
@@ -13,8 +14,8 @@ import (
 )
 
 var (
-	sagaExecTimer = metrics.NewTimer("dtx", "saga_txn", "saga timer", []string{"branch"})
-	sagaGauge     = metrics.NewGaugeVec("dtx", "saga_txn", "in flight sagas", []string{"state"})
+	sagaBranchTimer = metrics.NewTimer("dtx", "saga_branch", "saga branch timer", []string{"branch"})
+	sagaGauge       = metrics.NewGaugeVec("dtx", "saga_txn", "in flight sagas", []string{"state"})
 )
 
 // SagaExecutor
@@ -79,7 +80,10 @@ func (se *SagaExecutor) Commit(ctx context.Context, txn *model.Txn) *ActionFutur
 		return st.future()
 	}
 
-	_ = se.queueTask(st)
+	err = se.queueTask(st)
+	if err != nil {
+		se.finishTask(st, err)
+	}
 	return st.future()
 }
 
@@ -94,14 +98,19 @@ func (se *SagaExecutor) startCrontab() {
 			return duration
 		}
 
+		queuedTask := 0
 		for _, task := range tasks {
 			t := se.newTask(context.Background(), task)
 			if se.startTask(t) != nil {
 				continue
 			}
-			_ = se.queueTask(t)
+			queuedTask++
+			err = se.queueTask(t)
+			if err != nil {
+				se.finishTask(t, err)
+			}
 		}
-		if len(tasks) == limit {
+		if queuedTask == limit {
 			duration = time.Millisecond * 5
 		}
 		return duration
@@ -334,7 +343,7 @@ func (se *SagaExecutor) rollbackBranch(task *actionTask, branch *model.Branch) e
 func (se *SagaExecutor) processBranch(task *actionTask, branch *model.Branch) (resp string, err error) {
 	ctx, cancel := context.WithTimeout(task.Ctx, branch.Timeout)
 	defer cancel()
-	defer sagaExecTimer.Timer()(branch.BranchType)
+	defer sagaBranchTimer.Timer()(branch.BranchType)
 
 	nf := NewActionNotify(ctx, task.Txn, branch.BranchType, branch.Action, branch.Payload)
 	se.notifyChan <- nf
@@ -348,6 +357,11 @@ func (se *SagaExecutor) processBranch(task *actionTask, branch *model.Branch) (r
 		err = ErrExecutorClosed
 	}
 
+	if err != nil {
+		logutil.Logger(context.TODO()).Sugar().Debugf("process : %s %d %v", branch.Gtid,
+			branch.Bid, err)
+	}
+
 	return
 }
 
@@ -355,7 +369,7 @@ func (se *SagaExecutor) notify(task *actionTask) (err error) {
 	if !task.NeedNotify() {
 		return nil
 	}
-	defer sagaExecTimer.Timer()("notify")
+	defer sagaBranchTimer.Timer()("notify")
 
 	ctx, cancel := context.WithTimeout(task.Ctx, task.Txn.NotifyTimeout)
 	defer cancel()
