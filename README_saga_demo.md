@@ -153,7 +153,7 @@ func (rm *RmService) commitHandler(c *gin.Context) {
 	// 调用HandleCommit
 	// gtid和branchID作为branch的全局id，body是commit的请求body
 	// func(*gorm.DB)error 是RM实现commit的业务逻辑，此逻辑会在一个数据库事务中执行
-	err = sagarm.HandleCommit(rm.Db, gtid, branchID, string(body),
+	err = sagarm.HandleCommit(c.Request.Context(), rm.Db, gtid, branchID, string(body),
 		func(tx *gorm.DB) error {
 		
 			// 直接更新用户银行账号余额，给员工发工资
@@ -174,6 +174,9 @@ func (rm *RmService) commitHandler(c *gin.Context) {
 	
 	// 如果事务执行失败，则返回错误，通知TC这个commit执行失败
 	if err != nil {
+		if code == http.StatusOK {
+			code = http.StatusInternalServerError
+		}
 		c.Status(code)
 		_, _ = c.Writer.Write([]byte(err.Error()))
 		return
@@ -192,7 +195,7 @@ func (rm *RmService) compensationHandler(c *gin.Context) {
 	code := http.StatusOK
 
 	// 调用HandleCompensation
-	err := sagarm.HandleCompensation(rm.Db, gtid, branchID,
+	err := sagarm.HandleCompensation(c.Request.Context(), rm.Db, gtid, branchID,
 	
 		// compensation实现的业务逻辑，逻辑会在一个事务中执行
 		// body是commit请求时的body，由AP提供
@@ -221,6 +224,9 @@ func (rm *RmService) compensationHandler(c *gin.Context) {
 
 	// 如果compensation事务失败，则返回给TC，TC会不断重试直到成功
 	if err != nil {
+		if code == http.StatusOK {
+			code = http.StatusInternalServerError
+		}
 		c.Status(code)
 		_, _ = c.Writer.Write([]byte(err.Error()))
 		return

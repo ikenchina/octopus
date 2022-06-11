@@ -169,7 +169,7 @@ func (rm *RmServiceA) tryHandler(c *gin.Context) {
 	//
 	// 调用SDK的HandleTry方法来屏蔽事务try细节，func(*gorm.DB)只需要实现业务逻辑
 	//
-	err = tccrm.HandleTry(rm.Db, gtid, branchID, string(body),
+	err = tccrm.HandleTry(c.Request.Context(), rm.Db, gtid, branchID, string(body),
 		// 业务逻辑
 		func(tx *gorm.DB) error {
 			// 更新银行账户
@@ -193,6 +193,9 @@ func (rm *RmServiceA) tryHandler(c *gin.Context) {
 			return nil
 		})
 	if err != nil {
+		if code == http.StatusOK {
+			code = http.StatusInternalServerError
+		}
 		c.Status(code)
 		_, _ = c.Writer.Write([]byte(err.Error()))
 		return
@@ -214,7 +217,7 @@ func (rm *RmServiceA) confirmHandler(c *gin.Context) {
 
 	// 调用SDK的HandleConfirm方法来屏蔽事务confirm细节，
 	// func(*gorm.DB,string)只需要实现业务逻辑
-	err := tccrm.HandleConfirm(rm.Db, gtid, branchID,
+	err := tccrm.HandleConfirm(c.Request.Context(), rm.Db, gtid, branchID,
 		func(tx *gorm.DB, tryBody string) error {
 			record := AccountRecord{}
 			err := json.Unmarshal([]byte(tryBody), &record)
@@ -240,6 +243,9 @@ func (rm *RmServiceA) confirmHandler(c *gin.Context) {
 			return nil
 		})
 	if err != nil {
+		if code == http.StatusOK {
+			code = http.StatusInternalServerError
+		}
 		c.Status(code)
 		_, _ = c.Writer.Write([]byte(err.Error()))
 		return
@@ -262,7 +268,7 @@ func (rm *RmServiceA) cancelHandler(c *gin.Context) {
 
 	// 调用SDK的HandleCancel方法来屏蔽事务confirm细节，
 	// func(*gorm.DB,string)只需要实现业务逻辑
-	err := tccrm.HandleCancel(rm.Db, gtid, branchID,
+	err := tccrm.HandleCancel(c.Request.Context(), rm.Db, gtid, branchID,
 		func(tx *gorm.DB, tryBody string) error {
 			record := AccountRecord{}
 			err := json.Unmarshal([]byte(tryBody), &record)
@@ -285,6 +291,9 @@ func (rm *RmServiceA) cancelHandler(c *gin.Context) {
 			return nil
 		})
 	if err != nil {
+		if code == http.StatusOK {
+			code = http.StatusInternalServerError
+		}
 		c.Status(code)
 		_, _ = c.Writer.Write([]byte(err.Error()))
 		return

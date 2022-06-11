@@ -28,19 +28,6 @@ func WithTimerConstLabels(lables map[string]string) TimerOption {
 
 // NewTimer
 func NewTimer(namespace, metricName, help string, labels []string, opts ...TimerOption) *Timer {
-
-	// @todo remove summary
-	summary := prometheus.NewSummaryVec(
-		prometheus.SummaryOpts{
-			Namespace:  namespace,
-			Name:       metricName + "_s",
-			Help:       help + " (summary)",
-			Objectives: map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001},
-		},
-		labels)
-
-	prometheus.MustRegister(summary)
-
 	// histogram
 	timerOpts := timerOptions{}
 	for _, opt := range opts {
@@ -59,14 +46,12 @@ func NewTimer(namespace, metricName, help string, labels []string, opts ...Timer
 	prometheus.MustRegister(histogram)
 	return &Timer{
 		name:      metricName,
-		summary:   summary,
 		histogram: histogram,
 	}
 }
 
 type Timer struct {
 	name      string
-	summary   *prometheus.SummaryVec
 	histogram *prometheus.HistogramVec
 }
 
@@ -81,7 +66,6 @@ func (t *Timer) Timer() func(values ...string) {
 
 	return func(values ...string) {
 		seconds := float64(time.Since(now)) / float64(time.Second)
-		t.summary.WithLabelValues(values...).Observe(seconds)
 		t.histogram.WithLabelValues(values...).Observe(seconds)
 	}
 }
@@ -93,6 +77,5 @@ func (t *Timer) Observe(duration time.Duration, label ...string) {
 	}
 
 	seconds := float64(duration) / float64(time.Second)
-	t.summary.WithLabelValues(label...).Observe(seconds)
 	t.histogram.WithLabelValues(label...).Observe(seconds)
 }

@@ -1,6 +1,7 @@
 package saga
 
 import (
+	"context"
 	"database/sql"
 
 	"gorm.io/gorm"
@@ -9,9 +10,10 @@ import (
 	. "github.com/ikenchina/octopus/rm/common"
 )
 
-func HandleCommit(db *gorm.DB, gtid string, branchID int, requestBody string, commit func(*gorm.DB) error) error {
+func HandleCommit(ctx context.Context, db *gorm.DB, gtid string,
+	branchID int, requestBody string, commit func(*gorm.DB) error) error {
 
-	err := db.Transaction(func(tx *gorm.DB) error {
+	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// check : status of try is running or is done
 		txn, err := FindTransaction(tx, gtid, branchID)
 		if err != nil {
@@ -47,10 +49,9 @@ func HandleCommit(db *gorm.DB, gtid string, branchID int, requestBody string, co
 	return err
 }
 
-// @todo add context
-func HandleCompensation(db *gorm.DB, gtid string, branchID int, compensate func(*gorm.DB, string) error) error {
+func HandleCompensation(ctx context.Context, db *gorm.DB, gtid string, branchID int, compensate func(*gorm.DB, string) error) error {
 
-	err := db.Transaction(func(tx *gorm.DB) error {
+	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// check : status of try is running or is done
 		txn, err := FindTransaction(tx, gtid, branchID)
 		if err != nil {

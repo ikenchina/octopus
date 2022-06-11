@@ -238,6 +238,9 @@ func (te *TccExecutor) setTxnLease(task *actionTask, branchType string) {
 			expire.Add(bb.Timeout)
 		}
 	}
+	if expire.After(task.ExpireTime) {
+		expire = task.ExpireTime
+	}
 
 	task.SetLessee(te.cfg.Lessee)
 	task.SetLeaseExpireTime(expire)

@@ -83,7 +83,7 @@ func (rm *SagaRmBankService) commitHandler(c *gin.Context) {
 	//
 	// execute in a transaction
 	//
-	err = sagarm.HandleCommit(rm.db, gtid, branchID, string(body),
+	err = sagarm.HandleCommit(c.Request.Context(), rm.db, gtid, branchID, string(body),
 		func(tx *gorm.DB) error {
 			txr := tx.Model(BankAccount{}).Where("id=?", request.UserID).
 				Update("balance", gorm.Expr("balance+?", request.Account))
@@ -118,7 +118,7 @@ func (rm *SagaRmBankService) compensationHandler(c *gin.Context) {
 
 	logutil.Logger(c.Request.Context()).Sugar().Debugf("compensation : %s %s", gtid, branchID)
 
-	err := sagarm.HandleCompensation(rm.db, gtid, branchID,
+	err := sagarm.HandleCompensation(c.Request.Context(), rm.db, gtid, branchID,
 		func(tx *gorm.DB, body string) error {
 			record := BankAccountRecord{}
 			err := json.Unmarshal([]byte(body), &record)
@@ -164,7 +164,7 @@ func (*BankAccount) TableName() string {
 /*
 
 CREATE TABLE IF NOT ExISTS dtx.account(
-	id INT NOT NULL,
+	id BIGSERIAL PRIMARY key,
 	balance INT NOT NULL DEFAULT 0,
 	balance_freeze INT NOT NULL DEFAULT 0
 );
