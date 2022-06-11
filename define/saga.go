@@ -13,7 +13,7 @@ type SagaRequest struct {
 	ExpireTime        time.Time
 	SagaCallType      string // sync or async
 	Branches          []SagaBranch
-	ParallelExecution bool   `json:"-"` // parallel or serial
+	ParallelExecution bool
 	Lessee            string `json:"-"`
 }
 

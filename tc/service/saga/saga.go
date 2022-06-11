@@ -63,12 +63,14 @@ func convertToModel(saga *define.SagaRequest) *model.Txn {
 		Lessee:            saga.Lessee,
 		ExpireTime:        saga.ExpireTime,
 		CallType:          saga.SagaCallType,
-		NotifyAction:      saga.Notify.Action,
-		NotifyTimeout:     saga.Notify.Timeout,
-		NotifyRetry:       saga.Notify.Retry,
 		ParallelExecution: saga.ParallelExecution,
 		State:             model.TxnStatePrepared,
 		Business:          saga.Business,
+	}
+	if saga.Notify != nil {
+		sm.NotifyAction = saga.Notify.Action
+		sm.NotifyTimeout = saga.Notify.Timeout
+		sm.NotifyRetry = saga.Notify.Retry
 	}
 
 	for _, sub := range saga.Branches {

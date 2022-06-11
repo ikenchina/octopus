@@ -10,11 +10,9 @@ const (
 	BranchTypeCancel       = "cancel"
 
 	//
-	TxnStatePrepared = "prepared"
-
-	TxnStateFailed  = "failed"
-	TxnStateAborted = "aborted"
-
+	TxnStatePrepared   = "prepared"
+	TxnStateFailed     = "failed"
+	TxnStateAborted    = "aborted"
 	TxnStateCommitting = "committing"
 	TxnStateCommitted  = "committed"
 

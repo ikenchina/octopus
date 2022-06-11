@@ -68,7 +68,7 @@ POST http://octopus/dtx/tcc
 POST http://octopus/dtx/tcc/gtid_125
 ```
 
-请在HTTP头携带此`DTX_GID:gtid_125`header，方便负载均衡器将同一个事务的请求路由到同一个TC以减少事务的冲突概率。
+请在HTTP头携带此`DTX_GTID:gtid_125`header，方便负载均衡器将同一个事务的请求路由到同一个TC以减少事务的冲突概率。
 
 - body
 
@@ -107,7 +107,7 @@ POST http://octopus/dtx/tcc/gtid_125
 PUT http://octopus/dtx/tcc $body
 ```
 
-请在HTTP头携带此`DTX_GID:gtid_125`header，方便负载均衡器将同一个事务的请求路由到同一个TC以减少事务的冲突概率。
+请在HTTP头携带此`DTX_GTID:gtid_125`header，方便负载均衡器将同一个事务的请求路由到同一个TC以减少事务的冲突概率。
 
 
 - body：无
@@ -126,7 +126,7 @@ PUT http://octopus/dtx/tcc $body
 DELETE http://octopus/dtx/tcc $body
 ```
 
-请在HTTP头携带此`DTX_GID:gtid_125`header，方便负载均衡器将同一个事务的请求路由到同一个TC以减少事务的冲突概率。
+请在HTTP头携带此`DTX_GTID:gtid_125`header，方便负载均衡器将同一个事务的请求路由到同一个TC以减少事务的冲突概率。
 
 
 - body：无

@@ -14,8 +14,8 @@ import (
 )
 
 var (
-	tccExecTimer = metrics.NewTimer("dtx", "tcc", "tcc timer", []string{"branch"})
-	tccGauge     = metrics.NewGaugeVec("dtx", "tcc", "in flight tccs", []string{"state"})
+	tccBranchTimer = metrics.NewTimer("dtx", "tcc_branch", "tcc branch timer", []string{"branch"})
+	tccGauge       = metrics.NewGaugeVec("dtx", "tcc_txn", "in flight tccs", []string{"state"})
 )
 
 type TccExecutor struct {
@@ -63,14 +63,19 @@ func (te *TccExecutor) startCrontab() {
 		}
 		tasks = append(tasks, tasks2...)
 
+		queuedTask := 0
 		for _, task := range tasks {
 			t := te.newTask(context.Background(), task)
 			if te.startTask(t) != nil {
 				continue
 			}
-			te.queueTask(t)
+			queuedTask++
+			err = te.queueTask(t)
+			if err != nil {
+				te.finishTask(t, err)
+			}
 		}
-		if len(tasks) == limit {
+		if queuedTask == limit {
 			duration = time.Millisecond * 5
 		}
 		return duration
@@ -168,7 +173,10 @@ func (te *TccExecutor) endTxn(ctx context.Context, txn *model.Txn, state string)
 		return st.future()
 	}
 
-	te.queueTask(st)
+	err = te.queueTask(st)
+	if err != nil {
+		te.finishTask(st, err)
+	}
 	return st.future()
 }
 
@@ -278,7 +286,7 @@ func (te *TccExecutor) action(tcc *actionTask, branch *model.Branch) (string, er
 	ctx, cancel := context.WithTimeout(tcc.Ctx, branch.Timeout)
 	defer cancel()
 
-	timer := tccExecTimer.Timer()
+	timer := tccBranchTimer.Timer()
 
 	nf := NewActionNotify(ctx, tcc.Txn, branch.BranchType, branch.Action, branch.Payload)
 

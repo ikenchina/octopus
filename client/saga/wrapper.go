@@ -10,9 +10,10 @@ import (
 type Transaction struct {
 	cli     Client
 	biz     string
-	request define.SagaRequest
+	Request define.SagaRequest
 }
 
+// @todo support parallelly execute
 func SagaTransaction(ctx context.Context, tcServer string, expire time.Time,
 	branches func(t *Transaction, gtid string) error) (*define.SagaResponse, error) {
 
@@ -25,9 +26,9 @@ func SagaTransaction(ctx context.Context, tcServer string, expire time.Time,
 	}
 
 	// begin transaction
-	t.request.Gtid = gtid
-	t.request.ExpireTime = expire
-	t.request.Business = t.biz
+	t.Request.Gtid = gtid
+	t.Request.ExpireTime = expire
+	t.Request.Business = t.biz
 
 	// transaction body
 	err = branches(t, gtid)
@@ -35,11 +36,11 @@ func SagaTransaction(ctx context.Context, tcServer string, expire time.Time,
 		return nil, err
 	}
 
-	return t.cli.Commit(ctx, &t.request)
+	return t.cli.Commit(ctx, &t.Request)
 }
 
 func (t *Transaction) NewBranch(branchID int, commitAction string, compensationAction string, payload string) {
-	t.request.Branches = append(t.request.Branches, define.SagaBranch{
+	t.Request.Branches = append(t.Request.Branches, define.SagaBranch{
 		BranchId: branchID,
 		Payload:  payload,
 		Commit: define.SagaBranchCommit{
@@ -61,7 +62,7 @@ func (t *Transaction) NewBranch(branchID int, commitAction string, compensationA
 }
 
 func (t *Transaction) SetNotify(action string, timeout, retry time.Duration) {
-	t.request.Notify = &define.SagaNotify{
+	t.Request.Notify = &define.SagaNotify{
 		Action:  action,
 		Timeout: timeout,
 		Retry:   retry,

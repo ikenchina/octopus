@@ -26,10 +26,11 @@ func SetDbSchema(schema string) {
 
 // transaction
 type RmTransaction struct {
-	Gtid  string
-	Bid   int `gorm:"branch_id"`
-	State string
-	Body  string
+	Id      int64
+	Gtid    string
+	Bid     int
+	State   string
+	Payload string
 }
 
 func (*RmTransaction) TableName() string {
