@@ -86,7 +86,7 @@ RM需要提供 `commit`和`compensation`接口给TC调用来提交子事务。
 
 直接使用octopus/rm/saga下的wrapper.go的`HandleCommit`和`HandleCompensation`来实现接口。
 
-参考：`octopus/demo/saga/rm.go`
+参考：`octopus/test/utils/saga/bank_rm.go`
 
 
 
