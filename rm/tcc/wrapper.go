@@ -1,6 +1,7 @@
 package tcc
 
 import (
+	"context"
 	"database/sql"
 
 	"gorm.io/gorm"
@@ -9,9 +10,9 @@ import (
 	. "github.com/ikenchina/octopus/rm/common"
 )
 
-func HandleTry(db *gorm.DB, gtid string, branchID int, tryBody string, try func(stx *gorm.DB) error) error {
+func HandleTry(ctx context.Context, db *gorm.DB, gtid string, branchID int, tryBody string, try func(stx *gorm.DB) error) error {
 
-	err := db.Transaction(func(tx *gorm.DB) error {
+	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// check : status of try is running or is done
 		txn, err := FindTransaction(tx, gtid, branchID)
 		if err != nil {
@@ -49,10 +50,10 @@ func HandleTry(db *gorm.DB, gtid string, branchID int, tryBody string, try func(
 	return err
 }
 
-func HandleConfirm(db *gorm.DB, gtid string, branchID int,
+func HandleConfirm(ctx context.Context, db *gorm.DB, gtid string, branchID int,
 	confirm func(stx *gorm.DB, tryBody string) error) error {
 
-	err := db.Transaction(func(tx *gorm.DB) error {
+	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 
 		// check : status of try is running or is done
 		txn, err := FindTransaction(tx, gtid, branchID)
@@ -86,9 +87,9 @@ func HandleConfirm(db *gorm.DB, gtid string, branchID int,
 	return err
 }
 
-func HandleCancel(db *gorm.DB, gtid string, branchID int, cancel func(stx *gorm.DB, tryBody string) error) error {
+func HandleCancel(ctx context.Context, db *gorm.DB, gtid string, branchID int, cancel func(stx *gorm.DB, tryBody string) error) error {
 
-	err := db.Transaction(func(tx *gorm.DB) error {
+	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 
 		// check : status of try is running or is done
 		txn, err := FindTransaction(tx, gtid, branchID)
@@ -97,7 +98,7 @@ func HandleCancel(db *gorm.DB, gtid string, branchID int, cancel func(stx *gorm.
 		}
 
 		if txn == nil {
-			txr := tx.Model(RmTransaction{}).Create(RmTransaction{
+			txr := tx.Model(RmTransaction{}).Create(&RmTransaction{
 				Gtid:  gtid,
 				Bid:   branchID,
 				State: define.TxnStateAborted,
@@ -105,7 +106,7 @@ func HandleCancel(db *gorm.DB, gtid string, branchID int, cancel func(stx *gorm.
 			if txr.Error != nil {
 				return txr.Error
 			}
-			return ErrTxnNotPrepared
+			return nil
 		}
 
 		// transaction is already committed,

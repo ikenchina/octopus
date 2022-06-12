@@ -6,16 +6,10 @@ import (
 
 	"github.com/ikenchina/octopus/common/errorutil"
 	logutil "github.com/ikenchina/octopus/common/log"
-	"github.com/ikenchina/octopus/common/metrics"
 	"github.com/ikenchina/octopus/common/operator"
 	"github.com/ikenchina/octopus/common/slice"
 	"github.com/ikenchina/octopus/define"
 	"github.com/ikenchina/octopus/tc/app/model"
-)
-
-var (
-	sagaBranchTimer = metrics.NewTimer("dtx", "saga_branch", "saga branch timer", []string{"branch"})
-	sagaGauge       = metrics.NewGaugeVec("dtx", "saga_txn", "in flight sagas", []string{"state"})
 )
 
 // SagaExecutor
@@ -24,6 +18,7 @@ func NewSagaExecutor(cfg Config) (*SagaExecutor, error) {
 	se.baseExecutor = &baseExecutor{
 		cfg:     cfg,
 		process: se.process,
+		txnType: "saga",
 	}
 	return se, nil
 }
@@ -53,7 +48,7 @@ func (se *SagaExecutor) Get(ctx context.Context, gtid string) (*model.Txn, error
 
 func (se *SagaExecutor) newTask(ctx context.Context, txn *model.Txn) *actionTask {
 	t := newTask(ctx, txn, func(s, e time.Time, err error) {
-		sagaGauge.Set(float64(se.taskCount()), "inflight")
+		stateGauge.Set(float64(se.taskCount()), se.txnType, "inflight")
 	})
 	return t
 }
@@ -90,10 +85,16 @@ func (se *SagaExecutor) Commit(ctx context.Context, txn *model.Txn) *ActionFutur
 func (se *SagaExecutor) startCrontab() {
 	defer errorutil.Recovery()
 
-	limit := 10
+	limit := se.cfg.ExpiredLimit
+	if limit <= 0 {
+		limit = 20
+	}
+
 	se.cronjob(func() time.Duration {
+		ctx, cancel := context.WithTimeout(context.TODO(), time.Second*5)
+		defer cancel()
 		duration := se.cronDuration
-		tasks, err := se.cfg.Store.FindLeaseExpired(context.TODO(), define.TxnTypeSaga, nil, limit)
+		tasks, err := se.cfg.Store.FindLeaseExpired(ctx, define.TxnTypeSaga, nil, limit)
 		if err != nil {
 			return duration
 		}
@@ -132,7 +133,7 @@ func (se *SagaExecutor) process(task *actionTask) {
 	default:
 	}
 
-	sagaGauge.Set(float64(len(se.taskChan)), "inflight")
+	stateGauge.Set(float64(len(se.taskChan)), se.txnType, "inflight")
 
 	// prepare
 	if task.State == define.TxnStatePrepared {
@@ -197,6 +198,8 @@ func (se *SagaExecutor) shouldRollback(task *actionTask) bool {
 }
 
 func (se *SagaExecutor) processRollback(task *actionTask) {
+	defer txnTimer.Timer()(se.txnType, "rollback")
+
 	// 回滚所有分支，有的分支可能没有执行
 	// 但是也必须进行回滚，原因：
 	// 1. 可能已经执行commit，但TC认为没有执行
@@ -223,18 +226,20 @@ func (se *SagaExecutor) processRollback(task *actionTask) {
 		}
 	}
 
-	// prepared -> failed
-	err := se.saveState(task, []string{define.TxnStatePrepared, define.TxnStateFailed},
-		define.TxnStateFailed)
-	if err != nil {
-		return
-	}
-	if se.notify(task) != nil {
-		return
+	if task.NeedNotify() {
+		// prepared -> failed
+		err := se.saveState(task, []string{define.TxnStatePrepared, define.TxnStateFailed},
+			define.TxnStateFailed)
+		if err != nil {
+			return
+		}
+		if se.notify(task) != nil {
+			return
+		}
 	}
 
-	// failed -> aborted
-	err = se.saveState(task, []string{define.TxnStateFailed, define.TxnStateAborted},
+	// prepared/failed -> aborted
+	err := se.saveState(task, []string{define.TxnStatePrepared, define.TxnStateFailed, define.TxnStateAborted},
 		define.TxnStateAborted)
 	if err != nil {
 		return
@@ -259,6 +264,8 @@ func (se *SagaExecutor) grantLease(task *actionTask, branch *model.Branch) error
 }
 
 func (se *SagaExecutor) processPrepared(task *actionTask) {
+	defer txnTimer.Timer()(se.txnType, "prepared")
+
 	for _, branch := range task.Branches {
 		if branch.BranchType != define.BranchTypeCommit ||
 			branch.State == define.TxnStateCommitted {
@@ -269,6 +276,7 @@ func (se *SagaExecutor) processPrepared(task *actionTask) {
 			se.schedule(task, time.Millisecond*100)
 			return
 		}
+
 		err := se.grantLease(task, branch)
 		if err != nil {
 			se.finishTask(task, err)
@@ -280,20 +288,22 @@ func (se *SagaExecutor) processPrepared(task *actionTask) {
 		}
 	}
 
-	// prepare -> committing
-	err := se.saveState(task, []string{define.TxnStatePrepared, define.TxnStateCommitting},
-		define.TxnStateCommitting)
-	if err != nil {
-		return
+	if task.NeedNotify() {
+		// prepare -> committing
+		err := se.saveState(task, []string{define.TxnStatePrepared, define.TxnStateCommitting},
+			define.TxnStateCommitting)
+		if err != nil {
+			return
+		}
+
+		err = se.notify(task)
+		if err != nil {
+			return
+		}
 	}
 
-	err = se.notify(task)
-	if err != nil {
-		return
-	}
-
-	// committing -> committed
-	err = se.saveState(task, []string{define.TxnStateCommitting, define.TxnStateCommitted},
+	// prepared/committing -> committed
+	err := se.saveState(task, []string{define.TxnStatePrepared, define.TxnStateCommitting, define.TxnStateCommitted},
 		define.TxnStateCommitted)
 	if err != nil {
 		return
@@ -302,6 +312,7 @@ func (se *SagaExecutor) processPrepared(task *actionTask) {
 }
 
 func (se *SagaExecutor) commitBranch(task *actionTask, branch *model.Branch) error {
+
 	resp, err := se.processBranch(task, branch)
 	if err == nil {
 		branch.SetResponse(resp)
@@ -343,7 +354,7 @@ func (se *SagaExecutor) rollbackBranch(task *actionTask, branch *model.Branch) e
 func (se *SagaExecutor) processBranch(task *actionTask, branch *model.Branch) (resp string, err error) {
 	ctx, cancel := context.WithTimeout(task.Ctx, branch.Timeout)
 	defer cancel()
-	defer sagaBranchTimer.Timer()(branch.BranchType)
+	defer branchTimer.Timer()(se.txnType, branch.BranchType)
 
 	nf := NewActionNotify(ctx, task.Txn, branch.BranchType, branch.Action, branch.Payload)
 	se.notifyChan <- nf
@@ -369,7 +380,7 @@ func (se *SagaExecutor) notify(task *actionTask) (err error) {
 	if !task.NeedNotify() {
 		return nil
 	}
-	defer sagaBranchTimer.Timer()("notify")
+	defer branchTimer.Timer()(se.txnType, "notify")
 
 	ctx, cancel := context.WithTimeout(task.Ctx, task.Txn.NotifyTimeout)
 	defer cancel()

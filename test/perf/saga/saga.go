@@ -10,9 +10,8 @@ import (
 	"strings"
 	"sync"
 
-	"go.uber.org/ratelimit"
-
 	"github.com/gin-gonic/gin"
+	"go.uber.org/ratelimit"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
@@ -105,7 +104,7 @@ func ap() {
 	consume := func() {
 		timer := apTimer.Timer()
 		//wage := rand.Intn(100)
-		rr, _ := constructRecords2(10)
+		rr, _ := constructRecords(10)
 		resp, err := app.PayWage(rr)
 		if err != nil {
 			logutil.Logger(context.Background()).Sugar().Debugf("err : %v", err)

@@ -6,16 +6,10 @@ import (
 
 	"github.com/ikenchina/octopus/common/errorutil"
 	logutil "github.com/ikenchina/octopus/common/log"
-	"github.com/ikenchina/octopus/common/metrics"
 	"github.com/ikenchina/octopus/common/operator"
 	"github.com/ikenchina/octopus/common/slice"
 	"github.com/ikenchina/octopus/define"
 	"github.com/ikenchina/octopus/tc/app/model"
-)
-
-var (
-	tccBranchTimer = metrics.NewTimer("dtx", "tcc_branch", "tcc branch timer", []string{"branch"})
-	tccGauge       = metrics.NewGaugeVec("dtx", "tcc_txn", "in flight tccs", []string{"state"})
 )
 
 type TccExecutor struct {
@@ -27,6 +21,7 @@ func NewTccExecutor(cfg Config) (*TccExecutor, error) {
 	te.baseExecutor = &baseExecutor{
 		cfg:     cfg,
 		process: te.process,
+		txnType: "tcc",
 	}
 	return te, nil
 }
@@ -37,7 +32,7 @@ func (se *TccExecutor) Start() (err error) {
 		return
 	}
 	go se.startCrontab()
-	go se.startCleanup(define.TxnTypeSaga)
+	go se.startCleanup(define.TxnTypeTcc)
 	return
 }
 
@@ -48,15 +43,20 @@ func (se *TccExecutor) Stop() error {
 func (te *TccExecutor) startCrontab() {
 	defer errorutil.Recovery()
 
-	limit := 10
+	limit := te.cfg.ExpiredLimit
+	if limit <= 0 {
+		limit = 20
+	}
 	te.cronjob(func() time.Duration {
+		ctx, cancel := context.WithTimeout(context.TODO(), time.Second*10)
+		defer cancel()
 		duration := te.cronDuration
-		tasks, err := te.cfg.Store.FindExpired(context.TODO(), define.TxnTypeTcc, limit)
+		tasks, err := te.cfg.Store.FindExpired(ctx, define.TxnTypeTcc, limit)
 		if err != nil {
 			logutil.Logger(context.Background()).Sugar().Errorf("Find tcc expired transactions error : %v", err)
 		}
 
-		tasks2, err := te.cfg.Store.FindLeaseExpired(context.TODO(), define.TxnTypeTcc,
+		tasks2, err := te.cfg.Store.FindLeaseExpired(ctx, define.TxnTypeTcc,
 			[]string{define.TxnStateCommitting, define.TxnStateFailed}, limit)
 		if err != nil {
 			return duration
@@ -64,7 +64,12 @@ func (te *TccExecutor) startCrontab() {
 		tasks = append(tasks, tasks2...)
 
 		queuedTask := 0
+		found := make(map[string]struct{})
 		for _, task := range tasks {
+			if _, ok := found[task.Gtid]; ok {
+				continue
+			}
+			found[task.Gtid] = struct{}{}
 			t := te.newTask(context.Background(), task)
 			if te.startTask(t) != nil {
 				continue
@@ -84,7 +89,7 @@ func (te *TccExecutor) startCrontab() {
 
 func (te *TccExecutor) newTask(ctx context.Context, txn *model.Txn) *actionTask {
 	t := newTask(ctx, txn, func(s, e time.Time, err error) {
-		tccGauge.Set(float64(te.taskCount()), "inflight")
+		stateGauge.Set(float64(te.taskCount()), te.txnType, "inflight")
 	})
 	return t
 }
@@ -181,6 +186,8 @@ func (te *TccExecutor) endTxn(ctx context.Context, txn *model.Txn, state string)
 }
 
 func (te *TccExecutor) process(tcc *actionTask) {
+	defer txnTimer.Timer()(te.txnType, "process")
+
 	te.wait.Add(1)
 	defer te.wait.Done()
 
@@ -194,7 +201,7 @@ func (te *TccExecutor) process(tcc *actionTask) {
 	default:
 	}
 
-	tccGauge.Set(float64(len(te.taskChan)), "inflight")
+	stateGauge.Set(float64(len(te.taskChan)), te.txnType, "inflight")
 
 	if tcc.State == define.TxnStateCommitting {
 		te.processAction(tcc, define.BranchTypeConfirm)
@@ -238,15 +245,14 @@ func (te *TccExecutor) setTxnLease(task *actionTask, branchType string) {
 			expire.Add(bb.Timeout)
 		}
 	}
-	if expire.After(task.ExpireTime) {
-		expire = task.ExpireTime
-	}
 
 	task.SetLessee(te.cfg.Lessee)
 	task.SetLeaseExpireTime(expire)
 }
 
 func (te *TccExecutor) processAction(tcc *actionTask, branchType string) {
+	defer txnTimer.Timer()(te.txnType, "process_"+branchType)
+
 	for _, branch := range tcc.Branches {
 		if branch.BranchType == branchType && branch.State == define.TxnStatePrepared {
 
@@ -263,6 +269,8 @@ func (te *TccExecutor) processAction(tcc *actionTask, branchType string) {
 
 			_, err = te.action(tcc, branch)
 			if err != nil {
+				logutil.Logger(context.TODO()).Sugar().Errorf("process action error : %s %d %s %+v\n",
+					tcc.Gtid, branch.Bid, branchType, err)
 				te.schedule(tcc, branch.RetryDuration())
 				return
 			}
@@ -289,17 +297,17 @@ func (te *TccExecutor) action(tcc *actionTask, branch *model.Branch) (string, er
 	ctx, cancel := context.WithTimeout(tcc.Ctx, branch.Timeout)
 	defer cancel()
 
-	timer := tccBranchTimer.Timer()
+	timer := branchTimer.Timer()
 
 	nf := NewActionNotify(ctx, tcc.Txn, branch.BranchType, branch.Action, branch.Payload)
 
 	te.notifyChan <- nf
 	select {
 	case err := <-nf.DoneChan:
-		timer(branch.BranchType)
+		timer(te.txnType, branch.BranchType)
 		return nf.Msg, err
 	case <-te.closeChan:
-		timer(branch.BranchType)
+		timer(te.txnType, branch.BranchType)
 		return "", ErrExecutorClosed
 	}
 }

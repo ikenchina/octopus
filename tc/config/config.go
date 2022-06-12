@@ -20,6 +20,7 @@ type StorageConfig struct {
 	MaxConnections       int
 	MaxIdleConnections   int
 	Timeout              time.Duration
+	ExpiredLimit         int
 	CleanExpired         time.Duration
 	CleanLimit           int
 	CheckExpiredDuration time.Duration

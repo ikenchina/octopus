@@ -46,6 +46,7 @@ func NewSagaService(cfg Config) (*SagaService, error) {
 		Store:                store,
 		MaxConcurrency:       cfg.MaxConcurrentTask,
 		Lessee:               cfg.Lessee,
+		ExpiredLimit:         cfg.Store.ExpiredLimit,
 		CleanExpired:         cfg.Store.CleanExpired,
 		CleanLimit:           cfg.Store.CleanLimit,
 		CheckExpiredDuration: cfg.Store.CheckExpiredDuration,

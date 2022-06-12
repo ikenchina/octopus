@@ -58,7 +58,7 @@ func (rm *RmServiceA) tryHandler(c *gin.Context) {
 	//
 	// execute in a transaction
 	//
-	err = tccrm.HandleTry(rm.Db, gtid, branchID, string(body),
+	err = tccrm.HandleTry(c.Request.Context(), rm.Db, gtid, branchID, string(body),
 		func(tx *gorm.DB) error {
 			// execute try
 			txr := tx.Model(Account{}).Where("id=? AND balance_freeze=0 AND balance+?>=0",
@@ -86,7 +86,7 @@ func (rm *RmServiceA) confirmHandler(c *gin.Context) {
 	branchID, _ := strconv.Atoi(c.Param("branch_id"))
 	code := http.StatusOK
 
-	err := tccrm.HandleConfirm(rm.Db, gtid, branchID,
+	err := tccrm.HandleConfirm(c.Request.Context(), rm.Db, gtid, branchID,
 		func(tx *gorm.DB, tryBody string) error {
 			record := AccountRecord{}
 			err := json.Unmarshal([]byte(tryBody), &record)
@@ -121,7 +121,7 @@ func (rm *RmServiceA) cancelHandler(c *gin.Context) {
 	branchID, _ := strconv.Atoi(c.Param("branch_id"))
 	code := http.StatusOK
 
-	err := tccrm.HandleCancel(rm.Db, gtid, branchID,
+	err := tccrm.HandleCancel(c.Request.Context(), rm.Db, gtid, branchID,
 		func(tx *gorm.DB, tryBody string) error {
 			record := AccountRecord{}
 			err := json.Unmarshal([]byte(tryBody), &record)
@@ -162,7 +162,7 @@ func (*Account) TableName() string {
 /*
 
 CREATE TABLE IF NOT ExISTS dtx.account(
-	id INT NOT NULL,
+	id BIGSERIAL PRIMARY key,
 	balance INT NOT NULL DEFAULT 0,
 	balance_freeze INT NOT NULL DEFAULT 0
 );

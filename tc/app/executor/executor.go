@@ -10,6 +10,7 @@ import (
 
 	"github.com/ikenchina/octopus/common/errorutil"
 	logutil "github.com/ikenchina/octopus/common/log"
+	"github.com/ikenchina/octopus/common/metrics"
 	"github.com/ikenchina/octopus/common/slice"
 	"github.com/ikenchina/octopus/tc/app/model"
 )
@@ -29,10 +30,17 @@ var (
 	ErrInvalidState      = errors.New("invalid state")
 )
 
+var (
+	txnTimer    = metrics.NewTimer("dtx", "txn", "txn timer", []string{"type", "op"})
+	branchTimer = metrics.NewTimer("dtx", "branch", "branch timer", []string{"type", "branch"})
+	stateGauge  = metrics.NewGaugeVec("dtx", "txn", "state", []string{"type", "state"})
+)
+
 type Config struct {
 	Store                model.ModelStorage
 	MaxConcurrency       int
 	Lessee               string
+	ExpiredLimit         int
 	CleanExpired         time.Duration
 	CleanLimit           int
 	CheckExpiredDuration time.Duration
@@ -130,6 +138,7 @@ type baseExecutor struct {
 	process      func(t *actionTask)
 	cronDuration time.Duration
 	cfg          Config
+	txnType      string
 }
 
 func (ex *baseExecutor) start() error {
@@ -193,7 +202,7 @@ func (ex *baseExecutor) startCleanup(txn string) {
 	ex.wait.Add(1)
 	defer ex.wait.Done()
 
-	maxDuration := time.Millisecond * 1000
+	maxDuration := time.Second * 3
 	minDuration := time.Millisecond * 100
 	clean := func() time.Duration {
 		txns, err := ex.cfg.Store.FindEnded(context.Background(),

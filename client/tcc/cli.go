@@ -85,9 +85,12 @@ func (cli *Client) Register(ctx context.Context, gtid string, branch *define.Tcc
 	}
 
 	resp := &define.TccResponse{}
-	_, err = shttp.PostJson(ctx, gtid, url, string(data), resp)
+	code, err := shttp.PostJson(ctx, gtid, url, string(data), resp)
 	if err != nil {
 		return nil, err
+	}
+	if code >= http.StatusBadRequest {
+		return nil, fmt.Errorf("status code : %d", code)
 	}
 	return resp, nil
 }
