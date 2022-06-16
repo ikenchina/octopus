@@ -67,6 +67,7 @@ func NewTc() *TcService {
 		Store:               tccCfg,
 		MaxConcurrentTask:   cfg.MaxConcurrentTask,
 		MaxConcurrentBranch: cfg.MaxConcurrentBranch,
+		Lessee:              lessee,
 	})
 	errorutil.PanicIfError(err)
 

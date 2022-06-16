@@ -13,7 +13,9 @@
             "MaxConnections": 5,
             "MaxIdleConnections": 5,
             "Timeout": 1000000000,
-            "CleanExpired": 100000000000
+            "CleanExpired": 100000000000,
+            "CheckExpiredDuration": 100000000000,
+            "CheckLeaseExpiredDuration": 100000000000
         },
         "saga": {
             "Driver": "postgresql",
@@ -21,7 +23,9 @@
             "Timeout": 1000000000,
             "MaxConnections": 5,
             "MaxIdleConnections": 5,
-            "CleanExpired": 100000000000
+            "CleanExpired": 100000000000,
+            "CheckExpiredDuration": 100000000000,
+            "CheckLeaseExpiredDuration": 100000000000
         }
     },
     "Log": {

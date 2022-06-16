@@ -50,6 +50,7 @@ func NewTccService(cfg Config) (*TccService, error) {
 		CleanExpired:              cfg.Store.CleanExpired,
 		CleanLimit:                cfg.Store.CleanLimit,
 		CheckLeaseExpiredDuration: cfg.Store.CheckLeaseExpiredDuration,
+		CheckExpiredDuration:      cfg.Store.CheckExpiredDuration,
 	})
 	if err != nil {
 		return nil, err

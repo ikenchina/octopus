@@ -2,7 +2,8 @@
 
 Octopus是一个基于Golang的分布式事务解决方案，目前支持
 - Saga
-- TCC
+- TCC    
+
 两种分布式事务。
 
 
