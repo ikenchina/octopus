@@ -203,6 +203,10 @@ func (ex *baseExecutor) startCleanup(txn string) {
 	ex.wait.Add(1)
 	defer ex.wait.Done()
 
+	if ex.cfg.CheckExpiredDuration == 0 {
+		return
+	}
+
 	maxDuration := ex.cfg.CheckExpiredDuration
 	minDuration := time.Millisecond * 100
 	clean := func() time.Duration {

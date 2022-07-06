@@ -27,3 +27,8 @@ func Recovery(funcs ...RecoveryFallBackFunc) {
 }
 
 type RecoveryFallBackFunc func(interface{})
+
+func SafeGoroutine(f func(), recoveryCallBack ...RecoveryFallBackFunc) {
+	defer Recovery(recoveryCallBack...)
+	f()
+}
