@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	shttp "github.com/ikenchina/octopus/common/http"
+	"github.com/ikenchina/octopus/common/util"
 	"github.com/ikenchina/octopus/define"
 	"github.com/ikenchina/octopus/tc/app/model"
 )
@@ -17,8 +17,12 @@ const (
 )
 
 var (
-	errMinTimeout = fmt.Errorf("minimum timeout : %s", minTimeout.String())
-	errMaxPayload = fmt.Errorf("max payload :%d", maxPayload)
+	ErrInvalidBranchID   = errors.New("invalid branch id")
+	ErrInvalidGtid       = fmt.Errorf("invalid gtid")
+	ErrInvalidAction     = errors.New("invalid action")
+	ErrInvalidExpireTime = errors.New("invalid expire time")
+	ErrMinTimeout        = fmt.Errorf("minimum timeout : %s", minTimeout.String())
+	ErrMaxPayload        = fmt.Errorf("max payload :%d", maxPayload)
 )
 
 func convertToModel(tr *define.TccRequest) *model.Txn {
@@ -43,11 +47,11 @@ func convertToModel(tr *define.TccRequest) *model.Txn {
 
 func validate(tr *define.TccRequest) error {
 	if len(tr.Gtid) == 0 {
-		return errors.New("invalid global id")
+		return ErrInvalidGtid
 	}
 
 	if tr.ExpireTime.Unix() < 0 {
-		tr.ExpireTime = time.Now().Add(1 * time.Hour)
+		return ErrInvalidExpireTime
 	}
 
 	for _, b := range tr.Branches {
@@ -101,17 +105,17 @@ func convertBranchToModel(tb *define.TccBranch, gtid string) (branches []*model.
 
 func validateBranch(tb *define.TccBranch) error {
 	if tb.BranchId <= 0 {
-		return errors.New("invalid branch id")
+		return ErrInvalidBranchID
 	}
-	if !shttp.IsValidUrl(tb.ActionConfirm) ||
-		!shttp.IsValidUrl(tb.ActionCancel) {
-		return errors.New("invalid branch url")
+	if !util.IsValidAction(tb.ActionConfirm) ||
+		!util.IsValidAction(tb.ActionCancel) {
+		return ErrInvalidAction
 	}
 	if tb.Timeout < minTimeout {
-		return errMinTimeout
+		return ErrMinTimeout
 	}
 	if len(tb.Payload) > maxPayload {
-		return errMaxPayload
+		return ErrMaxPayload
 	}
 	return nil
 }

@@ -6,7 +6,7 @@ import (
 	"math"
 	"time"
 
-	shttp "github.com/ikenchina/octopus/common/http"
+	"github.com/ikenchina/octopus/common/util"
 	"github.com/ikenchina/octopus/define"
 	"github.com/ikenchina/octopus/tc/app/model"
 )
@@ -18,14 +18,18 @@ const (
 )
 
 var (
-	errMinTimeout = fmt.Errorf("minimum timeout : %s", minTimeout.String())
-	errMaxPayload = fmt.Errorf("max payload :%d", maxPayload)
-	errMinRetry   = fmt.Errorf("minimum retry : %s", minRetry.String())
-
-	ErrInvalidNotify = errors.New("wrong notify")
+	ErrMinTimeout        = fmt.Errorf("minimum timeout : %s", minTimeout.String())
+	ErrMaxPayload        = fmt.Errorf("max payload :%d", maxPayload)
+	ErrMinRetry          = fmt.Errorf("minimum retry : %s", minRetry.String())
+	ErrInvalidGtid       = fmt.Errorf("invalid gtid")
+	ErrInvalidNotify     = errors.New("invalid notify")
+	ErrInvalidExpireTime = errors.New("invalid expire time")
+	ErrInvalidBranchID   = errors.New("invalid branch id")
+	ErrInvalidAction     = errors.New("invalid action")
+	ErrInvalidRetry      = errors.New("invalid retry strategy")
 )
 
-func Validate(saga *define.SagaRequest) error {
+func validate(saga *define.SagaRequest) error {
 	if saga.SagaCallType == "" {
 		saga.SagaCallType = define.TxnCallTypeSync
 	}
@@ -33,19 +37,20 @@ func Validate(saga *define.SagaRequest) error {
 		return errors.New("invalid call type")
 	}
 	if len(saga.Gtid) == 0 {
-		return errors.New("invalid global transaction id")
+		return ErrInvalidGtid
 	}
 	if saga.SagaCallType == define.TxnCallTypeAsync {
-		if saga.Notify == nil || !shttp.IsValidUrl(saga.Notify.Action) || saga.Notify.Timeout < minTimeout || saga.Notify.Retry < minRetry {
+		if saga.Notify == nil || !util.IsValidAction(saga.Notify.Action) ||
+			saga.Notify.Timeout < minTimeout || saga.Notify.Retry < minRetry {
 			return ErrInvalidNotify
 		}
 	}
 	if saga.ExpireTime.Unix() <= 0 {
-		saga.ExpireTime = time.Now().Add(1 * time.Hour)
+		return ErrInvalidExpireTime
 	}
 
 	for _, sub := range saga.Branches {
-		err := validate(&sub)
+		err := validateBranch(&sub)
 		if err != nil {
 			return err
 		}
@@ -79,36 +84,36 @@ func convertToModel(saga *define.SagaRequest) *model.Txn {
 	return sm
 }
 
-func validate(sub *define.SagaBranch) error {
+func validateBranch(sub *define.SagaBranch) error {
 	if sub.BranchId <= 0 {
-		return errors.New("invalid branch id")
+		return ErrInvalidBranchID
 	}
-	if !shttp.IsValidUrl(sub.Commit.Action) {
-		return errors.New("invalid branch url")
+	if !util.IsValidAction(sub.Commit.Action) {
+		return ErrInvalidAction
 	}
 
 	if (sub.Commit.Retry.Constant == nil && sub.Commit.Retry.MaxRetry > 0) ||
 		(sub.Commit.Retry.Constant != nil && sub.Commit.Retry.Constant.Duration < minRetry) {
-		return errors.New("invalid retry strategy")
+		return ErrInvalidRetry
 	}
 
 	if sub.Commit.Timeout < minTimeout {
-		return errMinTimeout
+		return ErrMinTimeout
 	}
 
 	if len(sub.Compensation.Action) > 0 {
-		if !shttp.IsValidUrl(sub.Compensation.Action) {
-			return errors.New("invalid compensation url")
+		if !util.IsValidAction(sub.Compensation.Action) {
+			return ErrInvalidAction
 		}
 		if sub.Compensation.Timeout < minTimeout {
-			return errMinTimeout
+			return ErrMinTimeout
 		}
 		if sub.Compensation.Retry < minRetry {
-			return errMinRetry
+			return ErrMinRetry
 		}
 	}
 	if len(sub.Payload) > maxPayload {
-		return errMaxPayload
+		return ErrMaxPayload
 	}
 
 	return nil

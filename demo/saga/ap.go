@@ -34,7 +34,7 @@ func (app *Application) PayWage(employees []*saga_rm.BankAccountRecord) (*define
 			for i, employee := range employees {
 				branchID := i + 1
 				actionURL := fmt.Sprintf("%s%s/%s/%d", app.employeeHosts[employee.UserID], saga_rm.SagaRmBankServiceBasePath, gtid, branchID)
-				t.NewBranch(branchID, actionURL, actionURL, jsonMarshal(employee))
+				t.NewHttpBranch(branchID, actionURL, actionURL, jsonMarshal(employee))
 			}
 			return nil
 		})

@@ -10,6 +10,8 @@ require (
 	go.uber.org/automaxprocs v1.5.1
 	go.uber.org/ratelimit v0.2.0
 	go.uber.org/zap v1.21.0
+	google.golang.org/grpc v1.47.0
+	google.golang.org/protobuf v1.27.1
 	gorm.io/driver/postgres v1.3.4
 	gorm.io/gorm v1.23.4
 )

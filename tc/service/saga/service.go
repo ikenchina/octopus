@@ -11,8 +11,10 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/ikenchina/octopus/common/errorutil"
+	sgrpc "github.com/ikenchina/octopus/common/grpc"
 	shttp "github.com/ikenchina/octopus/common/http"
 	logutil "github.com/ikenchina/octopus/common/log"
+	"github.com/ikenchina/octopus/common/util"
 	"github.com/ikenchina/octopus/define"
 	executor "github.com/ikenchina/octopus/tc/app/executor"
 	"github.com/ikenchina/octopus/tc/app/model"
@@ -109,15 +111,36 @@ func (ss *SagaService) notifyHandle() {
 			defer errorutil.Recovery()
 			defer ss.wait.Done()
 			for sn := range ss.executor.NotifyChan() {
-				if sn.BranchType == define.BranchTypeCommit {
-					ss.httpAction(sn, http.MethodPost)
-				} else if sn.BranchType == define.BranchTypeCompensation {
-					ss.httpAction(sn, http.MethodDelete)
-				} else {
-					ss.httpNotifyAction(sn)
+				sch, domain, method := util.ExtractAction(sn.Action)
+				switch sch {
+				case "http", "https":
+					ss.httpHandle(sn)
+				case "grpc":
+					ss.grpcHandle(sn, domain, method)
+				default:
+					sn.Done(ErrInvalidAction, "scheme")
 				}
 			}
 		}()
+	}
+}
+
+func (ss *SagaService) grpcHandle(sn *executor.ActionNotify, domain, method string) {
+	resp, err := sgrpc.Invoke(sn.Ctx, domain, method, sn.Payload)
+	if err != nil {
+		sn.Done(err, "")
+		return
+	}
+	sn.Done(nil, string(resp))
+}
+
+func (ss *SagaService) httpHandle(sn *executor.ActionNotify) {
+	if sn.BranchType == define.BranchTypeCommit {
+		ss.httpAction(sn, http.MethodPost)
+	} else if sn.BranchType == define.BranchTypeCompensation {
+		ss.httpAction(sn, http.MethodDelete)
+	} else {
+		ss.httpNotifyAction(sn)
 	}
 }
 
@@ -148,7 +171,7 @@ func (ss *SagaService) parseSaga(c *gin.Context) (*model.Txn, error) {
 	if err != nil {
 		return nil, err
 	}
-	err = Validate(request)
+	err = validate(request)
 	if err != nil {
 		return nil, err
 	}

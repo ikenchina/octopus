@@ -18,4 +18,7 @@ const (
 
 	TxnCallTypeSync  = "sync"
 	TxnCallTypeAsync = "async"
+
+	RmProtocolGrpc     = "grpc"
+	RmProtocolSeparate = ";"
 )

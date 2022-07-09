@@ -11,8 +11,10 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/ikenchina/octopus/common/errorutil"
+	sgrpc "github.com/ikenchina/octopus/common/grpc"
 	shttp "github.com/ikenchina/octopus/common/http"
 	logutil "github.com/ikenchina/octopus/common/log"
+	"github.com/ikenchina/octopus/common/util"
 	"github.com/ikenchina/octopus/define"
 	"github.com/ikenchina/octopus/tc/app/executor"
 	"github.com/ikenchina/octopus/tc/app/model"
@@ -110,15 +112,45 @@ func (ss *TccService) notifyHandle() {
 			defer errorutil.Recovery()
 			defer ss.wait.Done()
 			for sn := range ss.executor.NotifyChan() {
-				switch sn.BranchType {
-				case define.BranchTypeConfirm:
-					ss.httpAction(sn, http.MethodPut)
-				case define.BranchTypeCancel:
-					ss.httpAction(sn, http.MethodDelete)
+				sch, domain, method := util.ExtractAction(sn.Action)
+				switch sch {
+				case "http", "https":
+					ss.httpHandle(sn)
+				case "grpc":
+					ss.grpcHandle(sn, domain, method)
+				default:
+					sn.Done(ErrInvalidAction, "scheme")
 				}
 			}
 		}()
 	}
+}
+
+func (ss *TccService) grpcHandle(sn *executor.ActionNotify, domain, method string) {
+	resp, err := sgrpc.Invoke(sn.Ctx, domain, method, sn.Payload)
+	if err != nil {
+		sn.Done(err, "")
+		return
+	}
+	sn.Done(nil, string(resp))
+}
+
+func (ss *TccService) httpHandle(sn *executor.ActionNotify) {
+	if sn.BranchType == define.BranchTypeCommit {
+		ss.httpAction(sn, http.MethodPost)
+	} else if sn.BranchType == define.BranchTypeCompensation {
+		ss.httpAction(sn, http.MethodDelete)
+	} else {
+		ss.httpNotifyAction(sn)
+	}
+}
+
+func (ss *TccService) httpNotifyAction(sn *executor.ActionNotify) {
+	sr := define.TccResponse{}
+	parseFromModel(&sr, sn.Txn())
+	payload, _ := json.Marshal(sr)
+	sn.Payload = string(payload)
+	ss.httpAction(sn, http.MethodPost)
 }
 
 // RESTful APIs

@@ -82,7 +82,7 @@ func SagaTransaction(ctx context.Context, tcServer string, expire time.Time,
 - payload：commit接口的请求body，TC调用RM的commit http URL的请求body
 
 ```
-func (t *Transaction) NewBranch(branchID int, commitAction string, compensationAction string, payload string)
+func (t *Transaction) NewHttpBranch(branchID int, commitAction string, compensationAction string, payload string)
 ```
 
 

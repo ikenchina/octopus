@@ -21,7 +21,7 @@ func NewTccExecutor(cfg Config) (*TccExecutor, error) {
 	te.baseExecutor = &baseExecutor{
 		cfg:     cfg,
 		process: te.process,
-		txnType: "tcc",
+		txnType: define.TxnTypeTcc,
 	}
 	return te, nil
 }

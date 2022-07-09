@@ -63,7 +63,7 @@ func (app *Application) PayWage(employees []*AccountRecord) (*define.SagaRespons
 				// 为Saga分布式事务添加子事务
 				// commit和compensation使用actionURL同一个URL, 
 				// http请求的body就是employee的Json序列化数据，数据会由TC放在commit的请求body中
-				t.NewBranch(branchID, actionURL, actionURL, jsonMarshal(employee))
+				t.NewHttpBranch(branchID, actionURL, actionURL, jsonMarshal(employee))
 			}
 			return nil
 		})

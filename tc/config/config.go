@@ -35,6 +35,7 @@ type NodeConfig struct {
 type Config struct {
 	Node                NodeConfig
 	HttpListen          string
+	GrpcListen          string
 	MaxConcurrentTask   int
 	MaxConcurrentBranch int
 	Storages            map[string]StorageConfig

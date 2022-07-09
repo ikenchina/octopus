@@ -41,7 +41,7 @@ func (ss *_sagaSuite) TestCommitWrapper() {
 
 	_, err = saga_client.SagaTransaction(context.Background(), ss.rm.tcDomain, time.Now().Add(1*time.Minute), func(t *saga_client.Transaction, gtid string) error {
 		for i, bb := range sr.Branches {
-			t.NewBranch(i+1, bb.Commit.Action, bb.Compensation.Action, bb.Payload)
+			t.NewHttpBranch(i+1, bb.Commit.Action, bb.Compensation.Action, bb.Payload)
 		}
 		t.SetNotify(sr.Notify.Action, sr.Notify.Timeout, sr.Notify.Retry)
 		return nil

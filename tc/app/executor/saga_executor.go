@@ -18,7 +18,7 @@ func NewSagaExecutor(cfg Config) (*SagaExecutor, error) {
 	se.baseExecutor = &baseExecutor{
 		cfg:     cfg,
 		process: se.process,
-		txnType: "saga",
+		txnType: define.TxnTypeSaga,
 	}
 	return se, nil
 }
