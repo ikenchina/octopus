@@ -9,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	saga_client "github.com/ikenchina/octopus/client/saga"
+	saga_client "github.com/ikenchina/octopus/ap/saga"
 	"github.com/ikenchina/octopus/common/errorutil"
 	shttp "github.com/ikenchina/octopus/common/http"
 	"github.com/ikenchina/octopus/define"
@@ -43,7 +43,7 @@ func (ss *_sagaSuite) TestCommitWrapper() {
 		for i, bb := range sr.Branches {
 			t.NewHttpBranch(i+1, bb.Commit.Action, bb.Compensation.Action, bb.Payload)
 		}
-		t.SetNotify(sr.Notify.Action, sr.Notify.Timeout, sr.Notify.Retry)
+		t.SetHttpNotify(sr.Notify.Action, sr.Notify.Timeout, sr.Notify.Retry)
 		return nil
 	})
 	ss.Nil(err)

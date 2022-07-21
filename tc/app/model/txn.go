@@ -1,6 +1,7 @@
 package model
 
 import (
+	"bytes"
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
@@ -126,9 +127,9 @@ type Branch struct {
 	Bid          int
 	BranchType   string
 	Action       string
-	Payload      string
+	Payload      []byte
 	Timeout      time.Duration
-	Response     string
+	Response     []byte
 	Retry        RetryStrategy
 	Lease        time.Time `gorm:"-"`
 	TryCount     int
@@ -185,8 +186,8 @@ func (s *Branch) SetState(state string) {
 	s.State = state
 }
 
-func (s *Branch) SetResponse(resp string) {
-	if resp == s.Response {
+func (s *Branch) SetResponse(resp []byte) {
+	if bytes.Equal(resp, s.Response) {
 		return
 	}
 	s.addUpdateField("response")

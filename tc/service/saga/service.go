@@ -8,24 +8,26 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/gin-gonic/gin"
-
 	"github.com/ikenchina/octopus/common/errorutil"
 	sgrpc "github.com/ikenchina/octopus/common/grpc"
 	shttp "github.com/ikenchina/octopus/common/http"
+	"github.com/ikenchina/octopus/common/idgenerator"
 	logutil "github.com/ikenchina/octopus/common/log"
 	"github.com/ikenchina/octopus/common/util"
 	"github.com/ikenchina/octopus/define"
+	tc_rpc "github.com/ikenchina/octopus/define/proto/saga/pb"
 	executor "github.com/ikenchina/octopus/tc/app/executor"
 	"github.com/ikenchina/octopus/tc/app/model"
 	"github.com/ikenchina/octopus/tc/config"
 )
 
 type SagaService struct {
-	cfg      Config
-	executor *executor.SagaExecutor
-	wait     sync.WaitGroup
-	close    int32
+	tc_rpc.UnimplementedTcServer
+	cfg         Config
+	executor    *executor.SagaExecutor
+	wait        sync.WaitGroup
+	close       int32
+	idGenerator idgenerator.IdGenerator
 }
 
 type Config struct {
@@ -37,7 +39,7 @@ type Config struct {
 	MaxConcurrentBranch int
 }
 
-func NewSagaService(cfg Config) (*SagaService, error) {
+func NewSagaService(cfg Config, idGenerator idgenerator.IdGenerator) (*SagaService, error) {
 	store, err := model.NewModelStorage(cfg.Store.Driver, cfg.Store.Dsn,
 		cfg.Store.Timeout, cfg.Store.MaxConnections, cfg.Store.MaxIdleConnections, cfg.Lessee)
 	if err != nil {
@@ -59,7 +61,8 @@ func NewSagaService(cfg Config) (*SagaService, error) {
 	}
 
 	return &SagaService{cfg: cfg,
-		executor: executor,
+		executor:    executor,
+		idGenerator: idGenerator,
 	}, nil
 }
 
@@ -70,6 +73,7 @@ func (ss *SagaService) Start() error {
 		return err
 	}
 	go ss.notifyHandle()
+	atomic.StoreInt32(&ss.close, 0)
 	return nil
 }
 
@@ -89,14 +93,14 @@ func (ss *SagaService) httpAction(notify *executor.ActionNotify, method string) 
 	code, body, err := shttp.Send(notify.Ctx, ss.cfg.DataCenterId, ss.cfg.NodeId, define.TxnTypeSaga,
 		notify.GID(), method, notify.Action, notify.Payload)
 	if err != nil {
-		notify.Done(err, "")
+		notify.Done(err, nil)
 		return
 	}
 
 	if code >= 200 && code < 300 {
 		notify.Done(nil, body)
 	} else {
-		notify.Done(fmt.Errorf("http code is %d", code), "")
+		notify.Done(fmt.Errorf("http code is %d", code), nil)
 	}
 }
 
@@ -118,7 +122,7 @@ func (ss *SagaService) notifyHandle() {
 				case "grpc":
 					ss.grpcHandle(sn, domain, method)
 				default:
-					sn.Done(ErrInvalidAction, "scheme")
+					sn.Done(ErrInvalidAction, nil)
 				}
 			}
 		}()
@@ -126,12 +130,12 @@ func (ss *SagaService) notifyHandle() {
 }
 
 func (ss *SagaService) grpcHandle(sn *executor.ActionNotify, domain, method string) {
-	resp, err := sgrpc.Invoke(sn.Ctx, domain, method, sn.Payload)
+	resp, err := sgrpc.Invoke(sn.Ctx, domain, sn.Txn().Gtid, sn.BranchID, method, sn.Payload)
 	if err != nil {
-		sn.Done(err, "")
+		sn.Done(err, nil)
 		return
 	}
-	sn.Done(nil, string(resp))
+	sn.Done(nil, (resp))
 }
 
 func (ss *SagaService) httpHandle(sn *executor.ActionNotify) {
@@ -146,130 +150,12 @@ func (ss *SagaService) httpHandle(sn *executor.ActionNotify) {
 
 func (ss *SagaService) httpNotifyAction(sn *executor.ActionNotify) {
 	sr := define.SagaResponse{}
-	parseFromModel(&sr, sn.Txn())
+	ss.parseFromModel(&sr, sn.Txn())
 	payload, _ := json.Marshal(sr)
-	sn.Payload = string(payload)
+	sn.Payload = payload
 	ss.httpAction(sn, http.MethodPost)
-}
-
-// RESTful APIs
-
-func (ss *SagaService) parseSaga(c *gin.Context) (*model.Txn, error) {
-	ss.wait.Add(1)
-	defer ss.wait.Done()
-
-	body, err := c.GetRawData()
-	if err != nil {
-		return nil, err
-	}
-	request := &define.SagaRequest{
-		DcId:   ss.cfg.DataCenterId,
-		NodeId: ss.cfg.NodeId,
-		Lessee: ss.cfg.Lessee,
-	}
-	err = json.Unmarshal(body, request)
-	if err != nil {
-		return nil, err
-	}
-	err = validate(request)
-	if err != nil {
-		return nil, err
-	}
-	sagaModel := convertToModel(request)
-	return sagaModel, nil
 }
 
 func (ss *SagaService) closed() bool {
 	return atomic.LoadInt32(&ss.close) == 1
-}
-
-func (ss *SagaService) Commit(c *gin.Context) {
-	if ss.closed() {
-		c.JSON(http.StatusServiceUnavailable, "")
-		return
-	}
-	ss.commit(c)
-}
-
-func (ss *SagaService) commit(c *gin.Context) {
-	ss.wait.Add(1)
-	defer ss.wait.Done()
-
-	saga, err := ss.parseSaga(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, &define.SagaResponse{
-			Msg: fmt.Sprintf("ERROR : %v", err),
-		})
-		return
-	}
-
-	ctx := c.Request.Context()
-	if saga.CallType == define.TxnCallTypeAsync {
-		ctx = context.Background()
-	}
-
-	future := ss.executor.Commit(ctx, saga)
-	resp := &define.SagaResponse{
-		Gtid:  saga.Gtid,
-		State: define.TxnStatePrepared,
-	}
-
-	if saga.CallType == define.TxnCallTypeSync {
-		err = future.GetError()
-	} else {
-		select {
-		case err = <-future.Get():
-		default:
-		}
-	}
-	parseFromModel(resp, future.Txn)
-	if err != nil {
-		resp.Msg = fmt.Sprintf("ERROR : %v", err)
-	}
-
-	c.JSON(ss.toStatusCode(err), resp)
-}
-
-func (ss *SagaService) Get(c *gin.Context) {
-	if ss.closed() {
-		c.JSON(http.StatusServiceUnavailable, "")
-		return
-	}
-	ss.get(c)
-}
-
-func (ss *SagaService) get(c *gin.Context) {
-	ss.wait.Add(1)
-	defer ss.wait.Done()
-
-	gtid := c.Param("gtid")
-	saga, err := ss.executor.Get(context.Background(), gtid)
-	resp := &define.SagaResponse{
-		Gtid: gtid,
-	}
-	if err != nil {
-		resp.Msg = fmt.Sprintf("ERROR : %v", err)
-		c.JSON(http.StatusOK, resp)
-		return
-	}
-	parseFromModel(resp, saga)
-	c.JSON(ss.toStatusCode(err), resp)
-}
-
-func (ss *SagaService) toStatusCode(err error) int {
-	if err == nil {
-		return http.StatusOK
-	}
-	switch err {
-	case executor.ErrTimeout:
-		return http.StatusRequestTimeout
-	case executor.ErrTaskAlreadyExist:
-		return http.StatusConflict
-	case executor.ErrNotExists:
-		return http.StatusNotFound
-	case executor.ErrExecutorClosed:
-		return http.StatusInternalServerError
-	default:
-		return http.StatusInternalServerError
-	}
 }

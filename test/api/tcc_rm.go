@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	tcc_cli "github.com/ikenchina/octopus/client/tcc"
+	tcc_cli "github.com/ikenchina/octopus/ap/tcc"
 	"github.com/ikenchina/octopus/common/errorutil"
 	"github.com/ikenchina/octopus/define"
 )

@@ -18,7 +18,7 @@ type TccBranch struct {
 	BranchId      int
 	ActionConfirm string
 	ActionCancel  string
-	Payload       string
+	Payload       []byte
 	Timeout       time.Duration
 	Retry         time.Duration
 }

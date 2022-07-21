@@ -176,6 +176,27 @@ func (store *modelStorageMock) UpdateConditions(ctx context.Context, txn *Txn, c
 	return ErrNotExist
 }
 
+func (store *modelStorageMock) UpdateStateConditions(ctx context.Context, txn *Txn, cb func(oldTxn *Txn) error) (err error) {
+	store.Lock()
+	defer store.Unlock()
+
+	now := time.Now()
+	for i, rr := range store.records {
+		if rr.Gtid == txn.Gtid && (rr.Lessee == store.lessee ||
+			rr.LeaseExpireTime.Before(now)) {
+			err := cb(rr)
+			if err != nil {
+				return err
+			}
+			d := new(Txn)
+			store.deepCopy(d, txn)
+			store.records[i] = d
+			return nil
+		}
+	}
+	return ErrNotExist
+}
+
 func (store *modelStorageMock) GrantLease(ctx context.Context, txn *Txn) error {
 	store.Lock()
 	defer store.Unlock()

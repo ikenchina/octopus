@@ -193,8 +193,7 @@ func (te *TccExecutor) process(tcc *actionTask) {
 
 	select {
 	case <-tcc.Ctx.Done():
-		te.finishTask(tcc, ErrTimeout)
-		return
+		tcc.notify(ErrTimeout)
 	case <-te.closeChan:
 		te.finishTask(tcc, ErrExecutorClosed)
 		return
@@ -222,7 +221,7 @@ func (te *TccExecutor) process(tcc *actionTask) {
 }
 
 func (te *TccExecutor) grantLease(task *actionTask, branch *model.Branch) error {
-	duration := branch.Timeout
+	duration := branch.Timeout + te.cfg.Store.Timeout()
 	if branch.Retry.Constant != nil {
 		duration += branch.Retry.Constant.Duration
 	}
@@ -267,13 +266,14 @@ func (te *TccExecutor) processAction(tcc *actionTask, branchType string) {
 				return
 			}
 
-			_, err = te.action(tcc, branch)
+			resp, err := te.action(tcc, branch)
 			if err != nil {
 				logutil.Logger(context.TODO()).Sugar().Errorf("process action error : %s %d %s %+v\n",
 					tcc.Gtid, branch.Bid, branchType, err)
 				te.schedule(tcc, branch.RetryDuration())
 				return
 			}
+			branch.SetResponse(resp)
 			branch.SetState(define.TxnStateCommitted)
 		}
 	}
@@ -292,14 +292,22 @@ func (te *TccExecutor) processAction(tcc *actionTask, branchType string) {
 	te.finishTask(tcc, nil)
 }
 
-func (te *TccExecutor) action(tcc *actionTask, branch *model.Branch) (string, error) {
+func (te *TccExecutor) action(tcc *actionTask, branch *model.Branch) ([]byte, error) {
 	branch.IncrTryCount()
 	ctx, cancel := context.WithTimeout(tcc.Ctx, branch.Timeout)
 	defer cancel()
 
-	timer := branchTimer.Timer()
+	payload := branch.Payload
+	if len(payload) == 0 && branch.BranchType == define.BranchTypeCancel {
+		for _, bb := range tcc.Branches {
+			if bb.Bid == branch.Bid && bb.BranchType == define.BranchTypeConfirm {
+				payload = bb.Payload
+			}
+		}
+	}
 
-	nf := NewActionNotify(ctx, tcc.Txn, branch.BranchType, branch.Action, branch.Payload)
+	timer := branchTimer.Timer()
+	nf := NewActionNotify(ctx, tcc.Txn, branch.BranchType, branch.Bid, branch.Action, payload)
 
 	te.notifyChan <- nf
 	select {
@@ -308,6 +316,6 @@ func (te *TccExecutor) action(tcc *actionTask, branch *model.Branch) (string, er
 		return nf.Msg, err
 	case <-te.closeChan:
 		timer(te.txnType, branch.BranchType)
-		return "", ErrExecutorClosed
+		return nil, ErrExecutorClosed
 	}
 }

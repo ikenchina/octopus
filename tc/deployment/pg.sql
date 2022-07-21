@@ -39,7 +39,8 @@ CREATE TABLE IF NOT EXISTS dtx.global_txn(
     parallel_execution BOOLEAN DEFAULT false NOT NULL
 );
 CREATE UNIQUE INDEX global_txn_gtid_idx ON dtx.global_txn(gtid);
-CREATE INDEX global_txn_state_type ON dtx.global_txn(state, txn_type);
+CREATE INDEX global_txn_leaseexpire_state ON dtx.global_txn(state, lease_expire_time);
+CREATE INDEX global_txn_expire_state ON dtx.global_txn(state, expire_time);
 
 
 CREATE TYPE dtx.branch_type AS ENUM (
@@ -56,9 +57,9 @@ CREATE TABLE IF NOT EXISTS dtx.branch_action(
     bid INT NOT NULL,
     branch_type dtx.branch_type NOT NULL,
     action character varying(1024) NOT NULL,
-    payload TEXT NOT NULL,
+    payload bytea,
     timeout BIGINT NOT NULL,
-    response TEXT,
+    response bytea,
     retry TEXT,
     try_count INT DEFAULT 0,
     state dtx.txn_state DEFAULT 'prepared'::dtx.txn_state NOT NULL,

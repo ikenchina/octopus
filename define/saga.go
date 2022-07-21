@@ -25,6 +25,7 @@ type SagaNotify struct {
 
 type SagaBranchCommit struct {
 	Action  string
+	Payload []byte
 	Timeout time.Duration
 	Retry   SagaRetry
 }
@@ -36,6 +37,7 @@ type SagaRetry struct {
 
 type SagaBranchCompensation struct {
 	Action  string
+	Payload []byte
 	Timeout time.Duration
 	// @todo retry strategy
 	Retry time.Duration
@@ -43,7 +45,6 @@ type SagaBranchCompensation struct {
 
 type SagaBranch struct {
 	BranchId     int
-	Payload      string
 	Commit       SagaBranchCommit
 	Compensation SagaBranchCompensation
 }
@@ -62,5 +63,5 @@ type SagaResponse struct {
 type SagaBranchResponse struct {
 	BranchId int
 	State    string
-	Payload  string
+	Payload  []byte
 }

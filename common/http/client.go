@@ -31,11 +31,11 @@ var HTTPTransport = &http.Transport{
 var client2 = http.Client{Transport: HTTPTransport}
 
 func Send(ctx context.Context, dc int, node int, txn string,
-	gtid string, method, url, body string) (int, string, error) {
+	gtid string, method, url string, body []byte) (int, []byte, error) {
 	// @todo delete method
-	req, err := http.NewRequest(method, url, bytes.NewBufferString(body))
+	req, err := http.NewRequest(method, url, bytes.NewBuffer(body))
 	if err != nil {
-		return 0, "", err
+		return 0, nil, err
 	}
 	req = req.WithContext(ctx)
 	req.Header.Add(HTTP_HREADER_GTID, gtid)
@@ -45,15 +45,15 @@ func Send(ctx context.Context, dc int, node int, txn string,
 
 	resp, err := client2.Do(req)
 	if err != nil {
-		return 0, "", err
+		return 0, nil, err
 	}
 	defer resp.Body.Close()
 
 	d, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return 0, "", err
+		return 0, nil, err
 	}
-	return resp.StatusCode, string(d), nil
+	return resp.StatusCode, (d), nil
 }
 
 func Get(ctx context.Context, gtid string, url string) ([]byte, int, error) {
@@ -80,8 +80,8 @@ func Get(ctx context.Context, gtid string, url string) ([]byte, int, error) {
 	return d, resp.StatusCode, nil
 }
 
-func Post(ctx context.Context, gtid string, url string, payload string) ([]byte, int, error) {
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBufferString(payload))
+func Post(ctx context.Context, gtid string, url string, payload []byte) ([]byte, int, error) {
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(payload))
 	if err != nil {
 		return []byte(""), 0, err
 	}

@@ -12,7 +12,7 @@ SDK分两个实现
 
 ## 事务提交者SDK
 
-实现代码 : github.com/ikenchina/octopus/client/tcc
+实现代码 : github.com/ikenchina/octopus/ap/tcc
 
 
 

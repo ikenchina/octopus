@@ -21,4 +21,7 @@ const (
 
 	RmProtocolGrpc     = "grpc"
 	RmProtocolSeparate = ";"
+
+	PayloadCodecJson  = "json"
+	PayloadCodecProto = "proto"
 )

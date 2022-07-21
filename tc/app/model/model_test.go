@@ -1,6 +1,7 @@
 package model
 
 import (
+	"bytes"
 	"context"
 	"flag"
 	"fmt"
@@ -449,7 +450,7 @@ func compareSaga(a, b *Txn) bool {
 		bb := b.Branches[i]
 
 		if aa.Id != bb.Id || aa.Gtid != bb.Gtid || aa.Bid != bb.Bid || aa.Action != bb.Action ||
-			aa.Payload != bb.Payload || aa.Timeout != bb.Timeout ||
+			bytes.Equal(aa.Payload, bb.Payload) || aa.Timeout != bb.Timeout ||
 			aa.State != bb.State || aa.Retry.MaxRetry != bb.Retry.MaxRetry ||
 			aa.TryCount != bb.TryCount {
 			return false
@@ -496,7 +497,7 @@ func (s *_Suite) newSagaTxn(subCount int) *Txn {
 			Bid:         i,
 			BranchType:  BranchTypeCommit,
 			Action:      fmt.Sprintf("http://service_%v/saga", i),
-			Payload:     fmt.Sprintf(`{"Gtid":%s, "Stid":%d}`, txn.Gtid, i),
+			Payload:     []byte(fmt.Sprintf(`{"Gtid":%s, "Stid":%d}`, txn.Gtid, i)),
 			Timeout:     1 * time.Second,
 			State:       TxnStatePrepared,
 			UpdatedTime: time.Now(),
@@ -514,7 +515,7 @@ func (s *_Suite) newSagaTxn(subCount int) *Txn {
 			Bid:         i,
 			BranchType:  BranchTypeCompensation,
 			Action:      fmt.Sprintf("http://service_%v/saga/rollback", i),
-			Payload:     fmt.Sprintf(`{"Gtid":%s, "Stid":%d}`, txn.Gtid, i),
+			Payload:     []byte(fmt.Sprintf(`{"Gtid":%s, "Stid":%d}`, txn.Gtid, i)),
 			Timeout:     1 * time.Second,
 			State:       TxnStatePrepared,
 			UpdatedTime: time.Now(),

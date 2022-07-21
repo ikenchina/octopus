@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+package tcc;
+option go_package = "./pb";
+
+
+service Tc {
+    rpc NewGtid(google.protobuf.Empty) returns (TccResponse) {}
+    rpc Get(TccRequest) returns (TccResponse) {}
+    rpc Prepare(TccRequest) returns (TccResponse) {}
+    rpc Register(TccRequest) returns (TccResponse) {}
+    rpc Confirm(TccRequest) returns (TccResponse) {}
+    rpc Cancel(TccRequest) returns (TccResponse) {}
+}
+
+message TccRequest {
+    string gtid = 1;
+    string business = 2;
+    google.protobuf.Timestamp expire_time = 3;
+    repeated TccBranchRequest branches = 4;
+}
+
+message TccBranchRequest {
+    int32 branch_id = 1;
+    string action_confirm = 2;
+    string action_cancel = 3;
+    bytes payload = 4;
+    google.protobuf.Duration timeout = 5;
+    google.protobuf.Duration retry = 6;
+}
+
+message TccResponse {
+    Tcc tcc = 1;
+}
+
+message Tcc {
+    string gtid = 1;
+    string state = 2;
+    repeated TccBranch branches = 3;
+    string msg = 4;
+}
+
+message TccBranch {
+    int32 branch_id = 1;
+    string state = 2;
+    bytes payload = 3;
+}

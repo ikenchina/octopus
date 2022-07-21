@@ -40,6 +40,7 @@ type ModelStorage interface {
 	Save(ctx context.Context, t *Txn) error
 	Update(ctx context.Context, t *Txn) error
 	UpdateConditions(ctx context.Context, txn *Txn, cb func(oldTxn *Txn) error) error
+	UpdateStateConditions(ctx context.Context, txn *Txn, cb func(oldTxn *Txn) error) (err error)
 	GrantLease(ctx context.Context, txn *Txn) error
 	GrantLeaseIncBranch(ctx context.Context, txn *Txn, branch *Branch, leaseDuration time.Duration) error
 
@@ -290,6 +291,40 @@ func (ms *modelStorage) Save(ctx context.Context, txn *Txn) (err error) {
 	return err
 }
 
+func (ms *modelStorage) UpdateStateConditions(ctx context.Context, txn *Txn,
+	cb func(oldTxn *Txn) error) (err error) {
+	defer sagaModelTimer.Timer()("UpdateConditions", operator.IfElse((err != nil), "err", "ok").(string))
+
+	ctx, cancel := ms.timeoutContext(ctx)
+	defer cancel()
+
+	txn.BeginSave()
+	err = ms.Db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		dbTxn := &Txn{}
+		txr := tx.Where("gtid=? AND (lessee = ? OR lease_expire_time < NOW())",
+			txn.Gtid, ms.lessee).Find(dbTxn)
+		if txr.Error != nil {
+			return txr.Error
+		}
+		if txr.RowsAffected == 0 {
+			return ErrInvalidLessee
+		}
+
+		err := cb(dbTxn)
+		if err != nil {
+			return err
+		}
+
+		txr = tx.Model(&Txn{}).Where("gtid=?", txn.Gtid).Update("state", txn.State)
+		return txr.Error
+	}, ms.defaultTxOpt)
+
+	if err == nil {
+		txn.EndSave()
+	}
+	return err
+}
+
 func (ms *modelStorage) UpdateConditions(ctx context.Context, txn *Txn, cb func(oldTxn *Txn) error) (err error) {
 	defer sagaModelTimer.Timer()("UpdateConditions", operator.IfElse((err != nil), "err", "ok").(string))
 
@@ -299,7 +334,7 @@ func (ms *modelStorage) UpdateConditions(ctx context.Context, txn *Txn, cb func(
 	txn.BeginSave()
 	err = ms.Db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		dbTxn := &Txn{}
-		txr := tx.Where("gtid=? AND (expire_time < NOW() OR lessee = ? OR lease_expire_time < NOW())",
+		txr := tx.Where("gtid=? AND (lessee = ? OR lease_expire_time < NOW())",
 			txn.Gtid, ms.lessee).Find(dbTxn)
 		if txr.Error != nil {
 			return txr.Error
@@ -340,8 +375,9 @@ func (ms *modelStorage) GrantLease(ctx context.Context, txn *Txn) (err error) {
 	ctx, cancel := ms.timeoutContext(ctx)
 	defer cancel()
 	err = ms.Db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		txr := tx.Model(Txn{}).Where("gtid=? AND (expire_time < NOW() OR lessee = ? OR lease_expire_time < NOW())",
-			txn.Gtid, ms.lessee).Select([]string{"lessee", "lease_expire_time", "updated_time"}).Updates(txn)
+		txr := tx.Model(Txn{}).
+			Where("gtid=? AND (lessee = ? OR lease_expire_time < NOW())",
+				txn.Gtid, ms.lessee).Select([]string{"lessee", "lease_expire_time", "updated_time"}).Updates(txn)
 		if txr.Error != nil {
 			return txr.Error
 		}
@@ -363,7 +399,7 @@ func (ms *modelStorage) GrantLeaseIncBranch(ctx context.Context, txn *Txn, branc
 	expire := fmt.Sprintf("NOW() + interval '%v millisecond'", leaseDuration.Milliseconds())
 	err = ms.Db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		txr := tx.Model(Txn{}).
-			Where("gtid=? AND (expire_time < NOW() OR lessee = ? OR lease_expire_time < NOW())",
+			Where("gtid=? AND (lessee = ? OR lease_expire_time < NOW())",
 				txn.Gtid, ms.lessee).
 			Update("lease_expire_time", gorm.Expr(expire)).
 			Update("lessee", txn.Lessee).Update("updated_time", gorm.Expr("NOW()"))
@@ -393,7 +429,7 @@ func (ms *modelStorage) Update(ctx context.Context, txn *Txn) (err error) {
 	err = ms.Db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		dbTxn := &Txn{}
 		txr := tx.Model(Txn{}).Where(
-			"gtid=? AND (expire_time < NOW() OR lessee = ? OR lease_expire_time < NOW())",
+			"gtid=? AND (lessee = ? OR lease_expire_time < NOW())",
 			txn.Gtid, ms.lessee).Find(dbTxn)
 		if txr.Error != nil {
 			return txr.Error
@@ -434,7 +470,7 @@ func (ms *modelStorage) UpdateBranch(ctx context.Context, branch *Branch) (err e
 	branch.BeginSave()
 	err = ms.Db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		dbtxn := &Txn{}
-		txr := tx.Where("gtid=? AND (expire_time < NOW() OR lessee = ? OR lease_expire_time < NOW())",
+		txr := tx.Where("gtid=? AND (lessee = ? OR lease_expire_time < NOW())",
 			branch.Gtid, ms.lessee).Find(dbtxn)
 		if txr.Error != nil {
 			return txr.Error
@@ -468,7 +504,7 @@ func (ms *modelStorage) UpdateBranchConditions(ctx context.Context, branch *Bran
 
 	err = ms.Db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		dbTxn := &Txn{}
-		txr := tx.Where("gtid=? AND (expire_time < NOW() OR lessee = ? OR lease_expire_time < NOW())",
+		txr := tx.Where("gtid=? AND (lessee = ? OR lease_expire_time < NOW())",
 			branch.Gtid, ms.lessee).Find(dbTxn)
 		if txr.Error != nil {
 			return txr.Error
