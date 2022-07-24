@@ -71,7 +71,7 @@ func (s *_Suite) TestUpdate() {
 		txn := s.newSagaTxn(2)
 		txn.Lessee = "test_invalid_leessee"
 		s.Nil(ms.Save(context.TODO(), txn))
-		txn.Branches[0].SetState(TxnStateCommitted)
+		txn.Branches[0].SetState(define.TxnStateCommitted)
 		err = ms.Update(context.Background(), txn)
 		s.Equal(ErrInvalidLessee, err)
 	}
@@ -80,10 +80,10 @@ func (s *_Suite) TestUpdate() {
 	s.Nil(ms.Save(context.TODO(), txn))
 
 	for _, sub := range txn.Branches {
-		sub.SetState(TxnStateCommitted)
+		sub.SetState(define.TxnStateCommitted)
 	}
 
-	txn.SetState(TxnStateCommitted)
+	txn.SetState(define.TxnStateCommitted)
 
 	err = ms.Update(context.TODO(), txn)
 	s.Nil(err)
@@ -119,7 +119,7 @@ func (s *_Suite) TestUpdateBranch() {
 		txn := s.newSagaTxn(2)
 		txn.Lessee = "test_invalid_leessee"
 		s.Nil(ms.Save(context.TODO(), txn))
-		txn.Branches[0].SetState(TxnStateCommitted)
+		txn.Branches[0].SetState(define.TxnStateCommitted)
 		err = ms.UpdateBranch(context.Background(), txn.Branches[0])
 		s.Equal(ErrInvalidLessee, err)
 	}
@@ -127,13 +127,13 @@ func (s *_Suite) TestUpdateBranch() {
 	//
 	txn := s.newSagaTxn(2)
 	s.Nil(ms.Save(context.TODO(), txn))
-	txn.Branches[0].SetState(TxnStateCommitted)
+	txn.Branches[0].SetState(define.TxnStateCommitted)
 	err = ms.UpdateBranch(context.Background(), txn.Branches[0])
 	s.Nil(err)
 
 	gtxn, err := ms.GetByGtid(context.Background(), txn.Gtid)
 	s.Nil(err)
-	s.Equal(TxnStateCommitted, gtxn.Branches[0].State)
+	s.Equal(define.TxnStateCommitted, gtxn.Branches[0].State)
 }
 
 func (s *_Suite) TestQueryNotExist() {
@@ -145,9 +145,7 @@ func (s *_Suite) TestQueryNotExist() {
 	s.Nil(saga)
 }
 
-func (s *_Suite) TestFindExpired() {
-	states := []string{TxnStatePrepared, TxnStateFailed, TxnStateCommitting}
-
+func (s *_Suite) TestFindPreparedExpired() {
 	ms, err := NewModelStorage(s.driver, s.dsn, s.timeout, 1, 1, s.lessee)
 	s.Nil(err)
 	var ts Txns
@@ -155,14 +153,15 @@ func (s *_Suite) TestFindExpired() {
 		ts = append(ts, s.newSagaTxn(2))
 	}
 
+	// drain
 	for {
-		ets, err := ms.FindExpired(context.Background(), ts[0].TxnType, 100)
+		ets, err := ms.FindPreparedExpired(context.Background(), ts[0].TxnType, 100)
 		s.Nil(err)
 		if len(ets) == 0 {
 			break
 		}
 		for _, t := range ets {
-			t.SetState(TxnStateAborted)
+			t.SetState(define.TxnStateAborted)
 			s.Nil(ms.Update(context.Background(), t))
 		}
 	}
@@ -175,21 +174,21 @@ func (s *_Suite) TestFindExpired() {
 		} else {
 			txn.ExpireTime = expiredTime
 		}
-		txn.SetState(states[i%len(states)])
+		txn.SetState(define.TxnStatePrepared)
 		s.Nil(ms.Save(context.Background(), txn))
 	}
 
 	limit := 4
 	for i := 0; i < 2; i++ {
-		ets, err := ms.FindExpired(context.Background(), ts[0].TxnType, limit)
+		ets, err := ms.FindPreparedExpired(context.Background(), ts[0].TxnType, limit)
 		s.Nil(err)
 		idc := int64(math.MaxInt64)
 		for _, t := range ets {
 			s.True(compareTxnTime(t.ExpireTime, expiredTime))
 			s.True(t.Id < idc)
-			s.True(slice.Contain(states, t.State))
+			s.Equal(define.TxnStatePrepared, t.State)
 			idc = t.Id
-			t.SetState(TxnStateAborted)
+			t.SetState(define.TxnStateAborted)
 			s.Nil(ms.Update(context.Background(), t))
 		}
 		if i == 1 {
@@ -198,8 +197,8 @@ func (s *_Suite) TestFindExpired() {
 	}
 }
 
-func (s *_Suite) TestFindLeaseExpired() {
-	states := []string{TxnStatePrepared, TxnStateFailed, TxnStateCommitting}
+func (s *_Suite) TestFindRunningLeaseExpired() {
+	states := []string{define.TxnStateRolling, define.TxnStateCommitting}
 
 	ms, err := NewModelStorage(s.driver, s.dsn, s.timeout, 1, 1, s.lessee)
 	s.Nil(err)
@@ -209,13 +208,13 @@ func (s *_Suite) TestFindLeaseExpired() {
 	}
 
 	for {
-		ets, err := ms.FindLeaseExpired(context.Background(), ts[0].TxnType, []string{}, 100)
+		ets, err := ms.FindRunningLeaseExpired(context.Background(), ts[0].TxnType, 100)
 		s.Nil(err)
 		if len(ets) == 0 {
 			break
 		}
 		for _, t := range ets {
-			t.SetState(TxnStateAborted)
+			t.SetState(define.TxnStateAborted)
 			s.Nil(ms.Update(context.Background(), t))
 		}
 	}
@@ -234,7 +233,7 @@ func (s *_Suite) TestFindLeaseExpired() {
 
 	limit := 4
 	for i := 0; i < 2; i++ {
-		ets, err := ms.FindLeaseExpired(context.Background(), ts[0].TxnType, nil, limit)
+		ets, err := ms.FindRunningLeaseExpired(context.Background(), ts[0].TxnType, limit)
 		s.Nil(err)
 		idc := int64(math.MaxInt64)
 		for _, t := range ets {
@@ -242,7 +241,7 @@ func (s *_Suite) TestFindLeaseExpired() {
 			s.True(t.Id < idc)
 			s.True(slice.Contain(states, t.State))
 			idc = t.Id
-			t.SetState(TxnStateAborted)
+			t.SetState(define.TxnStateAborted)
 			s.Nil(ms.Update(context.Background(), t))
 		}
 		if i == 1 {
@@ -252,7 +251,7 @@ func (s *_Suite) TestFindLeaseExpired() {
 }
 
 func (s *_Suite) TestGrantLease() {
-	states := []string{TxnStatePrepared, TxnStateFailed, TxnStateCommitting}
+	states := []string{define.TxnStatePrepared, define.TxnStateRolling, define.TxnStateCommitting}
 
 	ms, err := NewModelStorage(s.driver, s.dsn, s.timeout, 1, 1, s.lessee)
 	s.Nil(err)
@@ -276,9 +275,9 @@ func (s *_Suite) TestGrantLease() {
 
 	for i, txn := range ts {
 		if i%2 == 0 {
-			s.Equal(ErrInvalidLessee, ms.GrantLease(context.Background(), txn))
+			s.Equal(ErrInvalidLessee, ms.GrantLease(context.Background(), txn, txn.LeaseExpireTime.Sub(time.Now())))
 		} else {
-			s.Nil(ms.GrantLease(context.Background(), txn))
+			s.Nil(ms.GrantLease(context.Background(), txn, txn.LeaseExpireTime.Sub(time.Now())))
 		}
 	}
 }
@@ -293,7 +292,7 @@ func (s *_Suite) TestUpdateConditions() {
 		txn := s.newSagaTxn(2)
 		txn.Lessee = "test_invalid_lessee"
 		s.Nil(ms.Save(context.TODO(), txn))
-		txn.Branches[0].SetState(TxnStateCommitted)
+		txn.Branches[0].SetState(define.TxnStateCommitted)
 		err = ms.UpdateConditions(context.Background(), txn, nil)
 		s.Equal(ErrInvalidLessee, err)
 	}
@@ -301,14 +300,14 @@ func (s *_Suite) TestUpdateConditions() {
 	txn := s.newSagaTxn(2)
 	s.Nil(ms.Save(context.TODO(), txn))
 
-	txn.SetState(TxnStateCommitting)
+	txn.SetState(define.TxnStateCommitting)
 	s.NotNil(ms.UpdateConditions(context.Background(), txn,
 		func(oldTxn *Txn) error {
 			return fmt.Errorf("test")
 		}))
 	gtxn, err := ms.GetByGtid(context.Background(), txn.Gtid)
 	s.Nil(err)
-	s.NotEqual(TxnStateCommitting, gtxn.State)
+	s.NotEqual(define.TxnStateCommitting, gtxn.State)
 
 	s.Nil(ms.UpdateConditions(context.Background(), txn,
 		func(oldTxn *Txn) error {
@@ -316,7 +315,7 @@ func (s *_Suite) TestUpdateConditions() {
 		}))
 	gtxn, err = ms.GetByGtid(context.Background(), txn.Gtid)
 	s.Nil(err)
-	s.Equal(TxnStateCommitting, gtxn.State)
+	s.Equal(define.TxnStateCommitting, gtxn.State)
 }
 
 func (s *_Suite) TestRegisterBranches() {
@@ -347,14 +346,15 @@ func (s *_Suite) TestRegisterBranches() {
 	s.Nil(ms.RegisterBranches(context.Background(), branches))
 }
 
-func (s *_Suite) TestGrantLeaseIncBranch() {
+func (s *_Suite) TestGrantLeaseIncBranchCheckState() {
 	ms, err := NewModelStorage(s.driver, s.dsn, s.timeout, 1, 1, s.lessee)
 	s.Nil(err)
 	txn := s.newSagaTxn(2)
 	s.Nil(ms.Save(context.TODO(), txn))
 	branch := txn.Branches[0]
 
-	s.Nil(ms.GrantLeaseIncBranch(context.Background(), txn, branch, 120*time.Second))
+	states := []string{define.TxnStatePrepared}
+	s.Nil(ms.GrantLeaseIncBranchCheckState(context.Background(), txn, branch, 120*time.Second, states))
 	txn2, err := ms.GetByGtid(context.Background(), txn.Gtid)
 	s.Nil(err)
 	s.Greater(txn2.LeaseExpireTime, time.Now().Add(118*time.Second))
@@ -364,7 +364,7 @@ func (s *_Suite) TestGrantLeaseIncBranch() {
 func (s *_Suite) TestCleanExpiredTxns() {
 	ms, err := NewModelStorage(s.driver, s.dsn, s.timeout, 1, 1, s.lessee)
 	s.Nil(err)
-	states := []string{TxnStateAborted, TxnStateCommitted}
+	states := []string{define.TxnStateAborted, define.TxnStateCommitted}
 
 	for i := 0; i < 60; i++ {
 		txn := s.newSagaTxn(2)
@@ -476,7 +476,7 @@ func (s *_Suite) newSagaTxn(subCount int) *Txn {
 		//Id:                int64(s.random.Int31()),
 		Gtid:              fmt.Sprintf("test_gtid_%v", s.random.Int31()),
 		Business:          "test_bz",
-		State:             TxnStatePrepared,
+		State:             define.TxnStatePrepared,
 		TxnType:           TxnTypeSaga,
 		UpdatedTime:       time.Now(),
 		CreatedTime:       time.Now(),
@@ -499,7 +499,7 @@ func (s *_Suite) newSagaTxn(subCount int) *Txn {
 			Action:      fmt.Sprintf("http://service_%v/saga", i),
 			Payload:     []byte(fmt.Sprintf(`{"Gtid":%s, "Stid":%d}`, txn.Gtid, i)),
 			Timeout:     1 * time.Second,
-			State:       TxnStatePrepared,
+			State:       define.TxnStatePrepared,
 			UpdatedTime: time.Now(),
 			CreatedTime: time.Now(),
 			TryCount:    1,
@@ -517,7 +517,7 @@ func (s *_Suite) newSagaTxn(subCount int) *Txn {
 			Action:      fmt.Sprintf("http://service_%v/saga/rollback", i),
 			Payload:     []byte(fmt.Sprintf(`{"Gtid":%s, "Stid":%d}`, txn.Gtid, i)),
 			Timeout:     1 * time.Second,
-			State:       TxnStatePrepared,
+			State:       define.TxnStatePrepared,
 			UpdatedTime: time.Now(),
 			CreatedTime: time.Now(),
 			TryCount:    1,

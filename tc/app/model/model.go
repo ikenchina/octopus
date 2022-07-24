@@ -13,6 +13,7 @@ import (
 	logutil "github.com/ikenchina/octopus/common/log"
 	"github.com/ikenchina/octopus/common/metrics"
 	"github.com/ikenchina/octopus/common/operator"
+	"github.com/ikenchina/octopus/define"
 )
 
 var (
@@ -41,8 +42,9 @@ type ModelStorage interface {
 	Update(ctx context.Context, t *Txn) error
 	UpdateConditions(ctx context.Context, txn *Txn, cb func(oldTxn *Txn) error) error
 	UpdateStateConditions(ctx context.Context, txn *Txn, cb func(oldTxn *Txn) error) (err error)
-	GrantLease(ctx context.Context, txn *Txn) error
-	GrantLeaseIncBranch(ctx context.Context, txn *Txn, branch *Branch, leaseDuration time.Duration) error
+	GrantLease(ctx context.Context, txn *Txn, lease time.Duration) error
+	GrantLeaseIncBranchCheckState(ctx context.Context, txn *Txn, branch *Branch,
+		leaseDuration time.Duration, states []string) (err error)
 
 	// branch
 	UpdateBranch(ctx context.Context, b *Branch) error
@@ -50,8 +52,8 @@ type ModelStorage interface {
 	RegisterBranches(ctx context.Context, bs []*Branch) error
 
 	// find expired transactions
-	FindLeaseExpired(ctx context.Context, txn string, states []string, limit int) ([]*Txn, error)
-	FindExpired(ctx context.Context, txn string, limit int) ([]*Txn, error)
+	FindRunningLeaseExpired(ctx context.Context, txn string, limit int) ([]*Txn, error)
+	FindPreparedExpired(ctx context.Context, txn string, limit int) ([]*Txn, error)
 	CleanExpiredTxns(ctx context.Context, txn string, untileTime time.Time, limit int) ([]*Txn, error)
 }
 
@@ -155,18 +157,23 @@ func (ms *modelStorage) GetByGtid(ctx context.Context, gtid string) (txn *Txn, e
 	return txn, err
 }
 
-// @todo lease
-func (ms *modelStorage) FindExpired(ctx context.Context, txnType string, limit int) (txns []*Txn, err error) {
-	defer sagaModelTimer.Timer()("FindExpired", operator.IfElse((err != nil), "err", "ok").(string))
+// clean it : expired, commited,aborted
+// rolling it : expired, prepared
+// execute it : lease expired, not committed,aborted
+
+//
+// expired, and state is prepared
+func (ms *modelStorage) FindPreparedExpired(ctx context.Context, txnType string, limit int) (txns []*Txn, err error) {
+	defer sagaModelTimer.Timer()("FindPreparedExpired", operator.IfElse((err != nil), "err", "ok").(string))
 
 	ctx, cancel := ms.timeoutContext(ctx)
 	defer cancel()
 
-	states := []string{TxnStatePrepared, TxnStateFailed, TxnStateCommitting}
+	//states := []string{define.TxnStateCommitted, define.TxnStateAborted}
 	txns = make([]*Txn, 0)
 	err = ms.Db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 
-		txa := tx.Model(&Txn{}).Where("txn_type = ? AND state IN ? AND expire_time < NOW()", txnType, states)
+		txa := tx.Model(&Txn{}).Where("txn_type = ? AND state='prepared' AND expire_time < NOW()", txnType)
 		txa.Order("id DESC").Limit(limit) // ORDER BY id DESC
 		txr := txa.Find(&txns)
 		if txr.Error != nil {
@@ -191,19 +198,16 @@ func (ms *modelStorage) FindExpired(ctx context.Context, txnType string, limit i
 	return txns, err
 }
 
-func (ms *modelStorage) FindLeaseExpired(ctx context.Context, txnType string, states []string, limit int) (txns []*Txn, err error) {
-	defer sagaModelTimer.Timer()("FindLeaseExpired", operator.IfElse((err != nil), "err", "ok").(string))
+// lease is expired, and state is not one of commmitted, aborted, prepared
+func (ms *modelStorage) FindRunningLeaseExpired(ctx context.Context, txnType string, limit int) (txns []*Txn, err error) {
+	defer sagaModelTimer.Timer()("FindRunningLeaseExpired", operator.IfElse((err != nil), "err", "ok").(string))
 
 	ctx, cancel := ms.timeoutContext(ctx)
 	defer cancel()
 
-	if len(states) == 0 {
-		states = []string{TxnStatePrepared, TxnStateFailed, TxnStateCommitting}
-	}
-
 	txns = make([]*Txn, 0)
 	err = ms.Db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		txa := tx.Model(&Txn{}).Where("txn_type = ? AND state IN ? AND lease_expire_time < NOW()", txnType, states)
+		txa := tx.Model(&Txn{}).Where("txn_type = ? AND state NOT IN ('committed', 'aborted', 'prepared') AND lease_expire_time < NOW()", txnType)
 		txa.Order("id DESC").Limit(limit)
 		txr := txa.Find(&txns)
 		if txr.Error != nil {
@@ -227,17 +231,16 @@ func (ms *modelStorage) FindLeaseExpired(ctx context.Context, txnType string, st
 	return txns, err
 }
 
+// expired, and state is committed or aborted
 func (ms *modelStorage) CleanExpiredTxns(ctx context.Context, txnType string, untilTime time.Time, limit int) (txns []*Txn, err error) {
 	defer sagaModelTimer.Timer()("CleanExpiredTxns", operator.IfElse((err != nil), "err", "ok").(string))
 
 	ctx, cancel := ms.timeoutContext(ctx)
 	defer cancel()
 
-	states := []string{TxnStateAborted, TxnStateCommitted}
-
 	txns = make([]*Txn, 0)
 	err = ms.Db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		txa := tx.Model(&Txn{}).Where("txn_type = ? AND state IN ? AND expire_time < ?", txnType, states, untilTime)
+		txa := tx.Model(&Txn{}).Where("txn_type = ? AND state IN ('committed', 'aborted') AND expire_time < ?", txnType, untilTime)
 		txa.Order("id ASC").Limit(limit)
 		txr := txa.Find(&txns)
 		if txr.Error != nil {
@@ -288,12 +291,14 @@ func (ms *modelStorage) Save(ctx context.Context, txn *Txn) (err error) {
 		return txr.Error
 	})
 
+	txn.EndSave()
+
 	return err
 }
 
 func (ms *modelStorage) UpdateStateConditions(ctx context.Context, txn *Txn,
 	cb func(oldTxn *Txn) error) (err error) {
-	defer sagaModelTimer.Timer()("UpdateConditions", operator.IfElse((err != nil), "err", "ok").(string))
+	defer sagaModelTimer.Timer()("UpdateStateConditions", operator.IfElse((err != nil), "err", "ok").(string))
 
 	ctx, cancel := ms.timeoutContext(ctx)
 	defer cancel()
@@ -315,7 +320,9 @@ func (ms *modelStorage) UpdateStateConditions(ctx context.Context, txn *Txn,
 			return err
 		}
 
-		txr = tx.Model(&Txn{}).Where("gtid=?", txn.Gtid).Update("state", txn.State)
+		txr = tx.Model(&Txn{}).Where("gtid=?", txn.Gtid).
+			Update("state", txn.State).
+			Update("updated_time", gorm.Expr("NOW()"))
 		return txr.Error
 	}, ms.defaultTxOpt)
 
@@ -369,15 +376,18 @@ func (ms *modelStorage) UpdateConditions(ctx context.Context, txn *Txn, cb func(
 	return err
 }
 
-func (ms *modelStorage) GrantLease(ctx context.Context, txn *Txn) (err error) {
+func (ms *modelStorage) GrantLease(ctx context.Context, txn *Txn, lease time.Duration) (err error) {
 	defer sagaModelTimer.Timer()("GrantLease", operator.IfElse((err != nil), "err", "ok").(string))
 
+	expire := fmt.Sprintf("NOW() + interval '%v millisecond'", lease.Milliseconds())
 	ctx, cancel := ms.timeoutContext(ctx)
 	defer cancel()
 	err = ms.Db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		txr := tx.Model(Txn{}).
-			Where("gtid=? AND (lessee = ? OR lease_expire_time < NOW())",
-				txn.Gtid, ms.lessee).Select([]string{"lessee", "lease_expire_time", "updated_time"}).Updates(txn)
+			Where("gtid=? AND (lessee = ? OR lease_expire_time < NOW())", txn.Gtid, ms.lessee).
+			Update("lessee", txn.Lessee).
+			Update("lease_expire_time", gorm.Expr(expire)).
+			Update("updated_time", gorm.Expr("NOW()"))
 		if txr.Error != nil {
 			return txr.Error
 		}
@@ -389,8 +399,9 @@ func (ms *modelStorage) GrantLease(ctx context.Context, txn *Txn) (err error) {
 	return err
 }
 
-func (ms *modelStorage) GrantLeaseIncBranch(ctx context.Context, txn *Txn, branch *Branch, leaseDuration time.Duration) (err error) {
-	defer sagaModelTimer.Timer()("GrantLeaseIncBranch", operator.IfElse((err != nil), "err", "ok").(string))
+func (ms *modelStorage) GrantLeaseIncBranchCheckState(ctx context.Context, txn *Txn, branch *Branch,
+	leaseDuration time.Duration, states []string) (err error) {
+	defer sagaModelTimer.Timer()("GrantLeaseIncBranchCheckState", operator.IfElse((err != nil), "err", "ok").(string))
 
 	ctx, cancel := ms.timeoutContext(ctx)
 	defer cancel()
@@ -399,10 +410,10 @@ func (ms *modelStorage) GrantLeaseIncBranch(ctx context.Context, txn *Txn, branc
 	expire := fmt.Sprintf("NOW() + interval '%v millisecond'", leaseDuration.Milliseconds())
 	err = ms.Db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		txr := tx.Model(Txn{}).
-			Where("gtid=? AND (lessee = ? OR lease_expire_time < NOW())",
-				txn.Gtid, ms.lessee).
+			Where("gtid=? AND (lessee = ? OR lease_expire_time < NOW()) AND state IN ?", txn.Gtid, ms.lessee, states).
 			Update("lease_expire_time", gorm.Expr(expire)).
-			Update("lessee", txn.Lessee).Update("updated_time", gorm.Expr("NOW()"))
+			Update("lessee", txn.Lessee).
+			Update("updated_time", gorm.Expr("NOW()"))
 		if txr.Error != nil {
 			return txr.Error
 		}
@@ -428,9 +439,9 @@ func (ms *modelStorage) Update(ctx context.Context, txn *Txn) (err error) {
 
 	err = ms.Db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		dbTxn := &Txn{}
-		txr := tx.Model(Txn{}).Where(
-			"gtid=? AND (lessee = ? OR lease_expire_time < NOW())",
-			txn.Gtid, ms.lessee).Find(dbTxn)
+		txr := tx.Model(Txn{}).
+			Where("gtid=? AND (lessee = ? OR lease_expire_time < NOW())", txn.Gtid, ms.lessee).
+			Find(dbTxn)
 		if txr.Error != nil {
 			return txr.Error
 		}
@@ -470,8 +481,9 @@ func (ms *modelStorage) UpdateBranch(ctx context.Context, branch *Branch) (err e
 	branch.BeginSave()
 	err = ms.Db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		dbtxn := &Txn{}
-		txr := tx.Where("gtid=? AND (lessee = ? OR lease_expire_time < NOW())",
-			branch.Gtid, ms.lessee).Find(dbtxn)
+		txr := tx.
+			Where("gtid=? AND (lessee = ? OR lease_expire_time < NOW())", branch.Gtid, ms.lessee).
+			Find(dbtxn)
 		if txr.Error != nil {
 			return txr.Error
 		}
@@ -551,7 +563,8 @@ func (ms *modelStorage) RegisterBranches(ctx context.Context, branches []*Branch
 
 	err = ms.Db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		dbtxn := &Txn{}
-		txr := tx.Where("gtid=? AND expire_time > NOW() and state = ?", branches[0].Gtid, TxnStatePrepared).Find(dbtxn)
+		txr := tx.Where("gtid=? AND expire_time > NOW() and state = ?",
+			branches[0].Gtid, define.TxnStatePrepared).Find(dbtxn)
 		if txr.Error != nil {
 			return txr.Error
 		}
@@ -559,7 +572,7 @@ func (ms *modelStorage) RegisterBranches(ctx context.Context, branches []*Branch
 		if txr.RowsAffected == 0 {
 			return ErrInvalidLessee
 		}
-		if dbtxn.State != TxnStatePrepared {
+		if dbtxn.State != define.TxnStatePrepared {
 			return ErrIsNotPrepared
 		}
 

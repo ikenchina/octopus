@@ -60,7 +60,7 @@ func (ss *SagaService) convertToModel(saga *define.SagaRequest) (*model.Txn, err
 		ExpireTime:        saga.ExpireTime,
 		CallType:          saga.SagaCallType,
 		ParallelExecution: saga.ParallelExecution,
-		State:             model.TxnStatePrepared,
+		State:             define.TxnStatePrepared,
 		Business:          saga.Business,
 	}
 	if saga.Notify != nil {
@@ -120,7 +120,7 @@ func (ss *SagaService) convertBranchToModel(sub *define.SagaBranch, gtid string,
 		Timeout:     sub.Commit.Timeout,
 		CreatedTime: now,
 		UpdatedTime: now,
-		State:       model.TxnStatePrepared,
+		State:       define.TxnStatePrepared,
 	}
 
 	if len(sub.Commit.Payload) > 0 {
@@ -149,7 +149,7 @@ func (ss *SagaService) convertBranchToModel(sub *define.SagaBranch, gtid string,
 		Timeout:     sub.Compensation.Timeout,
 		CreatedTime: now,
 		UpdatedTime: now,
-		State:       model.TxnStatePrepared,
+		State:       define.TxnStatePrepared,
 	}
 	if len(sub.Compensation.Payload) > 0 {
 		// data, err := base64.StdEncoding.DecodeString(sub.Compensation.Payload)
@@ -186,8 +186,8 @@ func (ss *SagaService) parseFromModel(sr *define.SagaResponse, sm *model.Txn) {
 			rollback = bb
 		}
 		state := commit.State
-		if rollback.State == model.TxnStateCommitted {
-			state = model.TxnStateAborted
+		if rollback.State == define.TxnStateCommitted {
+			state = define.TxnStateAborted
 		}
 		sr.Branches = append(sr.Branches, define.SagaBranchResponse{
 			BranchId: bb.Bid,
@@ -222,7 +222,7 @@ func (ss *SagaService) convertPbToModel(in *tc_rpc.SagaRequest) (*model.Txn, err
 		Lessee:      ss.cfg.Lessee,
 		ExpireTime:  in.GetExpireTime().AsTime(),
 		CallType:    strings.ToLower(in.GetCallType().String()),
-		State:       model.TxnStatePrepared,
+		State:       define.TxnStatePrepared,
 		Business:    in.GetBusiness(),
 	}
 	if in.GetNotify() != nil {
@@ -284,7 +284,7 @@ func (ss *SagaService) convertBranchPbToModel(in *tc_rpc.SagaBranchRequest, gtid
 		Timeout:     in.GetCommit().GetTimeout().AsDuration(),
 		CreatedTime: now,
 		UpdatedTime: now,
-		State:       model.TxnStatePrepared,
+		State:       define.TxnStatePrepared,
 	}
 	do.Retry.MaxRetry = int(in.GetCommit().GetRetry().GetMaxRetry())
 	if in.GetCommit().GetRetry().GetStrategy().GetConstant() != nil {
@@ -304,7 +304,7 @@ func (ss *SagaService) convertBranchPbToModel(in *tc_rpc.SagaBranchRequest, gtid
 		Timeout:     in.GetCompensation().GetTimeout().AsDuration(),
 		CreatedTime: now,
 		UpdatedTime: now,
-		State:       model.TxnStatePrepared,
+		State:       define.TxnStatePrepared,
 	}
 	com.Retry.MaxRetry = -1
 	com.Retry.Constant = &model.RetryConstant{
@@ -341,8 +341,8 @@ func (ss *SagaService) parsePbFromModel(out *tc_rpc.SagaResponse, sm *model.Txn)
 			rollback = bb
 		}
 		state := commit.State
-		if rollback.State == model.TxnStateCommitted {
-			state = model.TxnStateAborted
+		if rollback.State == define.TxnStateCommitted {
+			state = define.TxnStateAborted
 		}
 		out.Saga.Branches = append(out.Saga.Branches,
 			&tc_rpc.SagaBranch{

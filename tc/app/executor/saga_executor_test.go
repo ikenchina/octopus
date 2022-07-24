@@ -79,7 +79,7 @@ func (s *_sagaSuite) TestTimeoutRetryOk() {
 	time.Sleep(time.Millisecond * (10 + 10)) // timeout, rescheduling
 
 	// ############   second time   ############
-	s.Equal(define.TxnStateFailed, service1Commit.State)
+	s.Equal(define.TxnStatePreAborted, service1Commit.State)
 
 	// response checking
 	s.Nil(sagaFuture.GetError())
@@ -151,7 +151,7 @@ func (s *_sagaSuite) TestCompensationOk() {
 
 	_, err = storage.GetByGtid(ctx, sagaFuture.Gtid)
 	s.Nil(err)
-	s.Equal(define.TxnStateFailed, service1Commit.State)
+	s.Equal(define.TxnStatePreAborted, service1Commit.State)
 
 	// response checking
 	s.Nil(sagaFuture.GetError())

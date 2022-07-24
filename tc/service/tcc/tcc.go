@@ -41,7 +41,7 @@ func (ss *TccService) convertToModel(tr *define.TccRequest) (*model.Txn, error) 
 		Lessee:            tr.Lessee,
 		CallType:          model.TxnCallTypeSync,
 		ParallelExecution: false,
-		State:             model.TxnStatePrepared,
+		State:             define.TxnStatePrepared,
 		Business:          tr.Business,
 	}
 	for _, bb := range tr.Branches {
@@ -79,7 +79,7 @@ func (ss *TccService) convertBranchToModel(tb *define.TccBranch, gtid string, no
 		Timeout:     tb.Timeout,
 		CreatedTime: now,
 		UpdatedTime: now,
-		State:       model.TxnStatePrepared,
+		State:       define.TxnStatePrepared,
 		Retry: model.RetryStrategy{
 			Constant: &model.RetryConstant{
 				Duration: tb.Retry,
@@ -95,7 +95,7 @@ func (ss *TccService) convertBranchToModel(tb *define.TccBranch, gtid string, no
 			Timeout:     tb.Timeout,
 			CreatedTime: now,
 			UpdatedTime: now,
-			State:       model.TxnStatePrepared,
+			State:       define.TxnStatePrepared,
 			Retry: model.RetryStrategy{
 				Constant: &model.RetryConstant{
 					Duration: tb.Retry,
@@ -127,8 +127,8 @@ func (ss *TccService) parseFromModel(tr *define.TccResponse, sm *model.Txn) {
 			rollback = bb
 		}
 		state := commit.State
-		if rollback.State == model.TxnStateCommitted {
-			state = model.TxnStateAborted
+		if rollback.State == define.TxnStateCommitted {
+			state = define.TxnStateAborted
 		}
 
 		tr.Branches = append(tr.Branches, define.TccBranchResponse{
@@ -154,7 +154,7 @@ func (ss *TccService) convertPbToModel(tcc *pb.TccRequest) (*model.Txn, error) {
 		Lessee:            ss.cfg.Lessee,
 		CallType:          model.TxnCallTypeSync,
 		ParallelExecution: false,
-		State:             model.TxnStatePrepared,
+		State:             define.TxnStatePrepared,
 		Business:          tcc.GetBusiness(),
 	}
 
@@ -195,7 +195,7 @@ func (ss *TccService) convertPbBranchToModel(tb *pb.TccBranchRequest, gtid strin
 		Timeout:     tb.GetTimeout().AsDuration(),
 		CreatedTime: now,
 		UpdatedTime: now,
-		State:       model.TxnStatePrepared,
+		State:       define.TxnStatePrepared,
 		Retry: model.RetryStrategy{
 			Constant: &model.RetryConstant{
 				Duration: tb.GetRetry().AsDuration(),
@@ -210,7 +210,7 @@ func (ss *TccService) convertPbBranchToModel(tb *pb.TccBranchRequest, gtid strin
 			Timeout:     tb.GetTimeout().AsDuration(),
 			CreatedTime: now,
 			UpdatedTime: now,
-			State:       model.TxnStatePrepared,
+			State:       define.TxnStatePrepared,
 			Retry: model.RetryStrategy{
 				Constant: &model.RetryConstant{
 					Duration: tb.GetRetry().AsDuration(),
@@ -245,8 +245,8 @@ func (ss *TccService) parsePbFromModel(tr *pb.TccResponse, sm *model.Txn) {
 			rollback = bb
 		}
 		state := commit.State
-		if rollback.State == model.TxnStateCommitted {
-			state = model.TxnStateAborted
+		if rollback.State == define.TxnStateCommitted {
+			state = define.TxnStateAborted
 		}
 
 		tr.Tcc.Branches = append(tr.Tcc.Branches, &pb.TccBranch{

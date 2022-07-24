@@ -329,7 +329,7 @@ func (ex *baseExecutor) finishTaskFatalError(task *actionTask, err error) bool {
 	return false
 }
 
-func (ex *baseExecutor) saveState(task *actionTask, srcStates []string, state string) error {
+func (ex *baseExecutor) updateState(task *actionTask, srcStates []string, state string) error {
 	originState := task.State
 	task.SetState(state)
 	err := ex.cfg.Store.UpdateConditions(task.Ctx, task.Txn, func(oldTxn *model.Txn) error {

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ikenchina/octopus/common/slice"
+	"github.com/ikenchina/octopus/define"
 )
 
 type modelStorageMock struct {
@@ -37,21 +38,6 @@ func (store *modelStorageMock) Exist(ctx context.Context, gtid string) error {
 	return err
 }
 
-func (store *modelStorageMock) FindPrepared(ctx context.Context, limit int) ([]*Txn, error) {
-	store.RLock()
-	defer store.RUnlock()
-	records := []*Txn{}
-
-	for _, sg := range store.records {
-		if sg.State == TxnStatePrepared || sg.State == TxnStateFailed {
-			d := new(Txn)
-			store.deepCopy(d, sg)
-			records = append(records, d)
-		}
-	}
-	return records, nil
-}
-
 type Txns []*Txn
 
 func (ts Txns) Len() int {
@@ -66,15 +52,14 @@ func (ts Txns) Swap(i, j int) {
 	ts[j] = tmp
 }
 
-func (store *modelStorageMock) FindExpired(ctx context.Context, txnType string, limit int) ([]*Txn, error) {
+func (store *modelStorageMock) FindPreparedExpired(ctx context.Context, txnType string, limit int) ([]*Txn, error) {
 	store.RLock()
 	defer store.RUnlock()
 	records := Txns{}
 
-	states := []string{TxnStatePrepared, TxnStateFailed, TxnStateCommitting}
 	now := time.Now()
 	for _, sg := range store.records {
-		if slice.Contain(states, sg.State) && sg.TxnType == txnType &&
+		if sg.State == define.TxnStatePrepared && sg.TxnType == txnType &&
 			sg.ExpireTime.Before(now) {
 			d := new(Txn)
 			store.deepCopy(d, sg)
@@ -85,18 +70,15 @@ func (store *modelStorageMock) FindExpired(ctx context.Context, txnType string, 
 	return records, nil
 }
 
-func (store *modelStorageMock) FindLeaseExpired(ctx context.Context, txnType string, states []string, limit int) ([]*Txn, error) {
+func (store *modelStorageMock) FindRunningLeaseExpired(ctx context.Context, txnType string, limit int) ([]*Txn, error) {
 	store.RLock()
 	defer store.RUnlock()
 	records := Txns{}
 
-	if len(states) == 0 {
-		states = []string{TxnStatePrepared, TxnStateFailed, TxnStateCommitting}
-	}
-
+	states := []string{define.TxnStateCommitted, define.TxnStateAborted, define.TxnStatePrepared}
 	now := time.Now()
 	for _, sg := range store.records {
-		if slice.Contain(states, sg.State) && sg.TxnType == txnType &&
+		if !slice.Contain(states, sg.State) && sg.TxnType == txnType &&
 			sg.LeaseExpireTime.Before(now) {
 			d := new(Txn)
 			store.deepCopy(d, sg)
@@ -197,7 +179,7 @@ func (store *modelStorageMock) UpdateStateConditions(ctx context.Context, txn *T
 	return ErrNotExist
 }
 
-func (store *modelStorageMock) GrantLease(ctx context.Context, txn *Txn) error {
+func (store *modelStorageMock) GrantLease(ctx context.Context, txn *Txn, lease time.Duration) error {
 	store.Lock()
 	defer store.Unlock()
 
@@ -205,7 +187,7 @@ func (store *modelStorageMock) GrantLease(ctx context.Context, txn *Txn) error {
 	for _, rr := range store.records {
 		if rr.Gtid == txn.Gtid && (rr.Lessee == store.lessee || rr.LeaseExpireTime.Before(now)) {
 			rr.Lessee = txn.Lessee
-			rr.LeaseExpireTime = txn.LeaseExpireTime
+			rr.LeaseExpireTime = now.Add(lease)
 			rr.UpdatedTime = now
 			return nil
 		}
@@ -233,6 +215,31 @@ func (store *modelStorageMock) GrantLeaseIncBranch(ctx context.Context, txn *Txn
 		}
 	}
 	return ErrNotExist
+}
+
+func (store *modelStorageMock) GrantLeaseIncBranchCheckState(ctx context.Context, txn *Txn, branch *Branch,
+	leaseDuration time.Duration, states []string) (err error) {
+
+	store.Lock()
+	defer store.Unlock()
+
+	now := time.Now()
+	for _, rr := range store.records {
+		if rr.Gtid == txn.Gtid && (rr.Lessee == store.lessee || rr.LeaseExpireTime.Before(now)) {
+			rr.Lessee = txn.Lessee
+			rr.LeaseExpireTime = time.Now().Add(leaseDuration)
+			rr.UpdatedTime = now
+			for _, bb := range rr.Branches {
+				if branch.Bid == bb.Bid && slice.Contain(states, bb.State) {
+					bb.TryCount++
+					break
+				}
+			}
+			return nil
+		}
+	}
+	return ErrNotExist
+
 }
 
 func (store *modelStorageMock) UpdateBranch(ctx context.Context, sub *Branch) error {
@@ -315,7 +322,7 @@ func (store *modelStorageMock) CleanExpiredTxns(ctx context.Context, txnType str
 	store.Lock()
 	defer store.Unlock()
 
-	states := []string{TxnStateAborted, TxnStateCommitted}
+	states := []string{define.TxnStateAborted, define.TxnStateCommitted}
 	txns := make([]*Txn, 0)
 	for _, rr := range store.records {
 		if rr.ExpireTime.Before(untilTime) {

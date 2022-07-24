@@ -12,6 +12,11 @@ import (
 	"github.com/ikenchina/octopus/tc/app/model"
 )
 
+//  finite state machine
+/*
+ *     prepare -> committing  -> committed
+ *     prepare -> rolling -> aborted
+ */
 type TccExecutor struct {
 	*baseExecutor
 }
@@ -40,6 +45,11 @@ func (se *TccExecutor) Stop() error {
 	return se.baseExecutor.stop()
 }
 
+// find expired tasks :
+//    1. if state is prepared : abort it
+// find committing and rolling lease expired tasks :
+//    1. if state is committing : commit it
+//    2. if state is rolling : abort it
 func (te *TccExecutor) startCrontab() {
 	defer errorutil.Recovery()
 
@@ -51,13 +61,14 @@ func (te *TccExecutor) startCrontab() {
 		ctx, cancel := context.WithTimeout(context.TODO(), time.Second*10)
 		defer cancel()
 		duration := te.cronDuration
-		tasks, err := te.cfg.Store.FindExpired(ctx, define.TxnTypeTcc, limit)
+		// expired and state is prepared
+		tasks, err := te.cfg.Store.FindPreparedExpired(ctx, define.TxnTypeTcc, limit)
 		if err != nil {
 			logutil.Logger(context.Background()).Sugar().Errorf("Find tcc expired transactions error : %v", err)
 		}
 
-		tasks2, err := te.cfg.Store.FindLeaseExpired(ctx, define.TxnTypeTcc,
-			[]string{define.TxnStateCommitting, define.TxnStateFailed}, limit)
+		// lease expired and state is not committed, aborted, prepared
+		tasks2, err := te.cfg.Store.FindRunningLeaseExpired(ctx, define.TxnTypeTcc, limit)
 		if err != nil {
 			return duration
 		}
@@ -98,6 +109,7 @@ func (te *TccExecutor) Get(ctx context.Context, gtid string) (*model.Txn, error)
 	return te.getTask(ctx, gtid)
 }
 
+// state : prepared
 func (te *TccExecutor) Prepare(ctx context.Context, txn *model.Txn) *ActionFuture {
 	te.wait.Add(1)
 	defer te.wait.Done()
@@ -113,6 +125,7 @@ func (te *TccExecutor) Prepare(ctx context.Context, txn *model.Txn) *ActionFutur
 	return st.future()
 }
 
+// state : prepared
 func (te *TccExecutor) Register(ctx context.Context, txn *model.Txn) *ActionFuture {
 	te.wait.Add(1)
 	defer te.wait.Done()
@@ -128,12 +141,14 @@ func (te *TccExecutor) Register(ctx context.Context, txn *model.Txn) *ActionFutu
 	return st.future()
 }
 
+// state : prepared -> committing
 func (te *TccExecutor) Commit(ctx context.Context, txn *model.Txn) *ActionFuture {
 	return te.endTxn(ctx, txn, define.TxnStateCommitting)
 }
 
+// state : prepared -> rolling
 func (te *TccExecutor) Rollback(ctx context.Context, txn *model.Txn) *ActionFuture {
-	return te.endTxn(ctx, txn, define.TxnStateFailed)
+	return te.endTxn(ctx, txn, define.TxnStateRolling)
 }
 
 func (te *TccExecutor) endTxn(ctx context.Context, txn *model.Txn, state string) *ActionFuture {
@@ -164,7 +179,7 @@ func (te *TccExecutor) endTxn(ctx context.Context, txn *model.Txn, state string)
 		define.BranchTypeConfirm, define.BranchTypeCancel).(string))
 	err = te.cfg.Store.UpdateConditions(st.Ctx, st.Txn, func(old_txn *model.Txn) error {
 		switch old_txn.State {
-		case define.TxnStateCommitting, define.TxnStateFailed:
+		case define.TxnStateCommitting, define.TxnStateRolling:
 			return ErrInProgress
 		case define.TxnStateAborted:
 			return ErrStateIsAborted
@@ -203,24 +218,28 @@ func (te *TccExecutor) process(tcc *actionTask) {
 	stateGauge.Set(float64(len(te.taskChan)), te.txnType, "inflight")
 
 	if tcc.State == define.TxnStateCommitting {
-		te.processAction(tcc, define.BranchTypeConfirm)
-	} else if tcc.State == define.TxnStateFailed {
-		te.processAction(tcc, define.BranchTypeCancel)
+		te.processAction(tcc, define.BranchTypeConfirm, define.TxnStateCommitting)
+	} else if tcc.State == define.TxnStateRolling {
+		te.processAction(tcc, define.BranchTypeCancel, define.TxnStateRolling)
 	} else if slice.InSlice(tcc.State, define.TxnStateCommitted, define.TxnStateAborted) {
-		err := te.saveState(tcc, []string{define.TxnStateCommitting, define.TxnStateFailed, tcc.State}, tcc.State)
+		err := te.updateState(tcc, []string{define.TxnStateCommitting, define.TxnStateRolling, tcc.State}, tcc.State)
 		if err != nil {
 			return
 		}
 		te.finishTask(tcc, nil)
-	} else {
+	} else { // prepared
 		// notice, clock skew between db and server
 		if tcc.ExpireTime.Before(time.Now()) {
-			te.processAction(tcc, define.BranchTypeCancel)
+			err := te.updateState(tcc, []string{define.TxnStatePrepared, define.TxnStateRolling}, define.TxnStateRolling)
+			if err != nil {
+				return
+			}
+			te.processAction(tcc, define.BranchTypeCancel, define.TxnStateRolling)
 		}
 	}
 }
 
-func (te *TccExecutor) grantLease(task *actionTask, branch *model.Branch) error {
+func (te *TccExecutor) grantBranchLease(task *actionTask, branch *model.Branch, states []string) error {
 	duration := branch.Timeout + te.cfg.Store.Timeout()
 	if branch.Retry.Constant != nil {
 		duration += branch.Retry.Constant.Duration
@@ -228,7 +247,7 @@ func (te *TccExecutor) grantLease(task *actionTask, branch *model.Branch) error 
 
 	task.SetLessee(te.cfg.Lessee)
 	task.SetLeaseExpireTime(time.Now().Add(duration))
-	err := te.cfg.Store.GrantLeaseIncBranch(task.Ctx, task.Txn, branch, duration)
+	err := te.cfg.Store.GrantLeaseIncBranchCheckState(task.Ctx, task.Txn, branch, duration, states)
 	if err != nil {
 		return err
 	}
@@ -241,26 +260,20 @@ func (te *TccExecutor) setTxnLease(task *actionTask, branchType string) {
 	expire := time.Now()
 	for _, bb := range task.Branches {
 		if bb.BranchType == branchType {
-			expire.Add(bb.Timeout)
+			expire.Add(bb.Timeout + bb.RetryDuration())
+			break
 		}
 	}
-
-	task.SetLessee(te.cfg.Lessee)
 	task.SetLeaseExpireTime(expire)
 }
 
-func (te *TccExecutor) processAction(tcc *actionTask, branchType string) {
+func (te *TccExecutor) processAction(tcc *actionTask, branchType string, state string) {
 	defer txnTimer.Timer()(te.txnType, "process_"+branchType)
 
 	for _, branch := range tcc.Branches {
 		if branch.BranchType == branchType && branch.State == define.TxnStatePrepared {
 
-			if branch.BranchType == define.BranchTypeCommit && tcc.ExpireTime.Before(time.Now()) {
-				te.schedule(tcc, time.Millisecond*100)
-				return
-			}
-
-			err := te.grantLease(tcc, branch)
+			err := te.grantBranchLease(tcc, branch, []string{state})
 			if err != nil {
 				te.finishTask(tcc, err)
 				return
@@ -268,8 +281,7 @@ func (te *TccExecutor) processAction(tcc *actionTask, branchType string) {
 
 			resp, err := te.action(tcc, branch)
 			if err != nil {
-				logutil.Logger(context.TODO()).Sugar().Errorf("process action error : %s %d %s %+v\n",
-					tcc.Gtid, branch.Bid, branchType, err)
+				logutil.Logger(context.TODO()).Sugar().Errorf("process action error : %s %d %s %+v\n", tcc.Gtid, branch.Bid, branchType, err)
 				te.schedule(tcc, branch.RetryDuration())
 				return
 			}
@@ -280,11 +292,8 @@ func (te *TccExecutor) processAction(tcc *actionTask, branchType string) {
 
 	tcc.SetState(operator.IfElse(branchType == define.BranchTypeConfirm, define.TxnStateCommitted,
 		define.TxnStateAborted).(string))
-	expectedStates := []string{define.TxnStateCommitting, define.TxnStateFailed, tcc.State}
-	if branchType == define.BranchTypeCancel {
-		expectedStates = append(expectedStates, define.TxnStatePrepared)
-	}
-	err := te.saveState(tcc, expectedStates, tcc.State)
+	expectedStates := []string{define.TxnStateCommitting, define.TxnStateRolling, tcc.State}
+	err := te.updateState(tcc, expectedStates, tcc.State)
 	if err != nil {
 		return
 	}
