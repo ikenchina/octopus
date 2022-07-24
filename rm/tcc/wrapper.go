@@ -10,7 +10,12 @@ import (
 	. "github.com/ikenchina/octopus/rm/common"
 )
 
-func HandleTryRaw(ctx context.Context, db *sql.DB, gtid string, branchID int,
+// HandleTry implement try logical of RM as a block.
+//   db is database handle
+//   gtid is global identifier of TCC transaction
+//   branchID is identifier of branch transaction
+//   try is try logical, TCC transaction will be aborted if it returns error
+func HandleTry(ctx context.Context, db *sql.DB, gtid string, branchID int,
 	try func(stx *sql.Tx) error) error {
 
 	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
@@ -18,7 +23,7 @@ func HandleTryRaw(ctx context.Context, db *sql.DB, gtid string, branchID int,
 		return err
 	}
 
-	txn, err := FindTransactionRaw(tx, gtid, branchID)
+	txn, err := FindTransaction(tx, gtid, branchID)
 	if err != nil {
 		return err
 	}
@@ -45,12 +50,14 @@ func HandleTryRaw(ctx context.Context, db *sql.DB, gtid string, branchID int,
 	return tx.Commit()
 }
 
-func HandleTry(ctx context.Context, db *gorm.DB, gtid string, branchID int,
+// HandleTryOrm is same as HandleTry
+//   db is database handle of gorm.DB
+func HandleTryOrm(ctx context.Context, db *gorm.DB, gtid string, branchID int,
 	try func(stx *gorm.DB) error) error {
 
 	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// check : status of try is running or is done
-		txn, err := FindTransaction(tx, gtid, branchID)
+		txn, err := FindTransactionOrm(tx, gtid, branchID)
 		if err != nil {
 			return err
 		}
@@ -85,7 +92,12 @@ func HandleTry(ctx context.Context, db *gorm.DB, gtid string, branchID int,
 	return err
 }
 
-func HandleConfirmRaw(ctx context.Context, db *sql.DB, gtid string, branchID int,
+// HandleConfirm implement confirm logical of RM as a block.
+//   db is database handle
+//   gtid is global identifier of TCC transaction
+//   branchID is identifier of branch transaction
+//   confirm is confirm logical, TCC transaction will be aborted if it returns error
+func HandleConfirm(ctx context.Context, db *sql.DB, gtid string, branchID int,
 	confirm func(*sql.Tx) error) error {
 
 	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
@@ -93,7 +105,7 @@ func HandleConfirmRaw(ctx context.Context, db *sql.DB, gtid string, branchID int
 		return err
 	}
 
-	txn, err := FindTransactionRaw(tx, gtid, branchID)
+	txn, err := FindTransaction(tx, gtid, branchID)
 	if err != nil {
 		return err
 	}
@@ -116,7 +128,7 @@ func HandleConfirmRaw(ctx context.Context, db *sql.DB, gtid string, branchID int
 	if err != nil {
 		return err
 	}
-	err = UpdateTransactionStateRaw(tx, gtid, branchID, define.TxnStateCommitted)
+	err = UpdateTransactionState(tx, gtid, branchID, define.TxnStateCommitted)
 	if err != nil {
 		return err
 	}
@@ -124,13 +136,15 @@ func HandleConfirmRaw(ctx context.Context, db *sql.DB, gtid string, branchID int
 	return tx.Commit()
 }
 
-func HandleConfirm(ctx context.Context, db *gorm.DB, gtid string, branchID int,
+// HandleConfirmOrm is same as HandleConfirm
+//   db is database handle of gorm.DB
+func HandleConfirmOrm(ctx context.Context, db *gorm.DB, gtid string, branchID int,
 	confirm func(stx *gorm.DB) error) error {
 
 	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 
 		// check : status of try is running or is done
-		txn, err := FindTransaction(tx, gtid, branchID)
+		txn, err := FindTransactionOrm(tx, gtid, branchID)
 		if err != nil {
 			return err
 		}
@@ -154,14 +168,19 @@ func HandleConfirm(ctx context.Context, db *gorm.DB, gtid string, branchID int,
 			return err
 		}
 
-		return UpdateTransactionState(tx, gtid, branchID, define.TxnStateCommitted)
+		return UpdateTransactionStateOrm(tx, gtid, branchID, define.TxnStateCommitted)
 	}, &sql.TxOptions{
 		Isolation: sql.LevelRepeatableRead,
 	})
 	return err
 }
 
-func HandleCancelRaw(ctx context.Context, db *sql.DB, gtid string, branchID int,
+// HandleCancel implement cancel logical of RM as a block.
+//   db is database handle
+//   gtid is global identifier of TCC transaction
+//   branchID is identifier of branch transaction
+//   cancel is cancel logical, TCC transaction will be aborted if it returns error
+func HandleCancel(ctx context.Context, db *sql.DB, gtid string, branchID int,
 	cancel func(*sql.Tx) error) error {
 
 	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
@@ -169,7 +188,7 @@ func HandleCancelRaw(ctx context.Context, db *sql.DB, gtid string, branchID int,
 		return err
 	}
 
-	txn, err := FindTransactionRaw(tx, gtid, branchID)
+	txn, err := FindTransaction(tx, gtid, branchID)
 	if err != nil {
 		return err
 	}
@@ -194,7 +213,7 @@ func HandleCancelRaw(ctx context.Context, db *sql.DB, gtid string, branchID int,
 		return err
 	}
 
-	err = UpdateTransactionStateRaw(tx, gtid, branchID, define.TxnStateAborted)
+	err = UpdateTransactionState(tx, gtid, branchID, define.TxnStateAborted)
 	if err != nil {
 		return err
 	}
@@ -202,13 +221,15 @@ func HandleCancelRaw(ctx context.Context, db *sql.DB, gtid string, branchID int,
 	return tx.Commit()
 }
 
-func HandleCancel(ctx context.Context, db *gorm.DB, gtid string, branchID int,
+// HandleCancelOrm is same as HandleCancel
+//   db is database handle of gorm.DB
+func HandleCancelOrm(ctx context.Context, db *gorm.DB, gtid string, branchID int,
 	cancel func(stx *gorm.DB) error) error {
 
 	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 
 		// check : status of try is running or is done
-		txn, err := FindTransaction(tx, gtid, branchID)
+		txn, err := FindTransactionOrm(tx, gtid, branchID)
 		if err != nil {
 			return err
 		}
@@ -237,7 +258,7 @@ func HandleCancel(ctx context.Context, db *gorm.DB, gtid string, branchID int,
 			return err
 		}
 
-		return UpdateTransactionState(tx, gtid, branchID, define.TxnStateAborted)
+		return UpdateTransactionStateOrm(tx, gtid, branchID, define.TxnStateAborted)
 	}, &sql.TxOptions{
 		Isolation: sql.LevelRepeatableRead,
 	})

@@ -95,7 +95,7 @@ RM由员工账户所属银行来实现。
 
 RM需要提供 `try`、`confirm`和`cancel`接口来执行、提交和取消子事务。
 
-直接使用octopus/rm/tcc下的wrapper.go的`HandleTry`、`HandleConfirm`和`HandleCancel`来实现接口。
+直接使用octopus/rm/tcc下的wrapper.go的`HandleTryOrm`、`HandleConfirmOrm`和`HandleCancelOrm`来实现接口。
 
 参考：`octopus/demo/tcc/rm.go`
 
@@ -169,7 +169,7 @@ func (rm *RmServiceA) tryHandler(c *gin.Context) {
 	//
 	// 调用SDK的HandleTry方法来屏蔽事务try细节，func(*gorm.DB)只需要实现业务逻辑
 	//
-	err = tccrm.HandleTry(c.Request.Context(), rm.Db, gtid, branchID, string(body),
+	err = tccrm.HandleTryOrm(c.Request.Context(), rm.Db, gtid, branchID, string(body),
 		// 业务逻辑
 		func(tx *gorm.DB) error {
 			// 更新银行账户
@@ -217,7 +217,7 @@ func (rm *RmServiceA) confirmHandler(c *gin.Context) {
 
 	// 调用SDK的HandleConfirm方法来屏蔽事务confirm细节，
 	// func(*gorm.DB,string)只需要实现业务逻辑
-	err := tccrm.HandleConfirm(c.Request.Context(), rm.Db, gtid, branchID,
+	err := tccrm.HandleConfirmOrm(c.Request.Context(), rm.Db, gtid, branchID,
 		func(tx *gorm.DB, tryBody string) error {
 			record := AccountRecord{}
 			err := json.Unmarshal([]byte(tryBody), &record)
@@ -268,7 +268,7 @@ func (rm *RmServiceA) cancelHandler(c *gin.Context) {
 
 	// 调用SDK的HandleCancel方法来屏蔽事务confirm细节，
 	// func(*gorm.DB,string)只需要实现业务逻辑
-	err := tccrm.HandleCancel(c.Request.Context(), rm.Db, gtid, branchID,
+	err := tccrm.HandleCancelOrm(c.Request.Context(), rm.Db, gtid, branchID,
 		func(tx *gorm.DB, tryBody string) error {
 			record := AccountRecord{}
 			err := json.Unmarshal([]byte(tryBody), &record)

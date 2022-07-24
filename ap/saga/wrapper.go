@@ -13,15 +13,17 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+// Transaction
+// A distributed SAGA transaction
 type Transaction struct {
 	biz     string
 	Request pb.SagaRequest
 	err     error
 }
 
-// @todo Cancel interface
-
-// @todo support parallelly execute
+// SagaTransaction start a transaction as a block,
+//   return SagaResponse and error, transaction rolled back if it is not nil,
+//   SagaResponse describes states of saga transaction
 func SagaTransaction(ctx context.Context, cli *GrpcClient, expire time.Time,
 	branches func(t *Transaction, gtid string) error) (*pb.SagaResponse, error) {
 
@@ -95,26 +97,34 @@ func defaultBranchOptions() *branchOptions {
 
 type branchFunctions func(o *branchOptions)
 
+// WithMaxRetry set max retry times
 func WithMaxRetry(times int) branchFunctions {
 	return func(o *branchOptions) {
 		o.maxRetry = times
 	}
 }
 
+// WithTimeout set timeout for branch transaction
 func WithTimeout(to time.Duration) branchFunctions {
 	return func(o *branchOptions) {
 		o.timeout = to
 	}
 }
 
+// WithConstantRetry set constant retry duration
 func WithConstantRetry(dur time.Duration) branchFunctions {
 	return func(o *branchOptions) {
 		o.constRetry = dur
 	}
 }
 
-// grpc branch
-func (t *Transaction) NewGrpcBranch(branchID int, grpcServer string,
+// NewGrpcBranch create a branch transaction for RM(resource manager) which is a grpc server
+//  branchID is unique identifier, ensure it is unique in a saga transaction
+//  rmServer is grpc target of RM,
+//  commitAction is grpc method to commit branch transaction
+//  compensationAction is grpc method to compensate branch transaction
+//  payload is request of grpc method to commit or compensate
+func (t *Transaction) NewGrpcBranch(branchID int, rmServer string,
 	commitAction string, compensationAction string,
 	payload proto.Message,
 	opts ...branchFunctions) {
@@ -125,9 +135,9 @@ func (t *Transaction) NewGrpcBranch(branchID int, grpcServer string,
 	}
 
 	commitAction = define.RmProtocolGrpc + define.RmProtocolSeparate +
-		grpcServer + define.RmProtocolSeparate + commitAction
+		rmServer + define.RmProtocolSeparate + commitAction
 	compensationAction = define.RmProtocolGrpc + define.RmProtocolSeparate +
-		grpcServer + define.RmProtocolSeparate + compensationAction
+		rmServer + define.RmProtocolSeparate + compensationAction
 
 	branch := &pb.SagaBranchRequest{
 		BranchId: int32(branchID),
@@ -161,6 +171,11 @@ func (t *Transaction) NewGrpcBranch(branchID int, grpcServer string,
 	t.Request.Branches = append(t.Request.Branches, branch)
 }
 
+// NewHttpBranch create a branch transaction for RM(resource manager) which is a http server
+//  branchID is unique identifier, ensure it is unique in a saga transaction
+//  commitAction is URL to commit branch transaction with http POST method
+//  compensationAction is URL to compensate branch transaction with http DELETE method
+//  payload is http request body for commit or compensate actions
 func (t *Transaction) NewHttpBranch(branchID int,
 	commitAction string, compensationAction string,
 	payload []byte,
@@ -212,4 +227,8 @@ func (t *Transaction) SetGrpcNotify(grpcServer string, action string, timeout, r
 		Timeout: durationpb.New(timeout),
 		Retry:   durationpb.New(retry),
 	}
+}
+
+func (t *Transaction) Abort() {
+
 }

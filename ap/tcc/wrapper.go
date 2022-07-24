@@ -18,6 +18,8 @@ import (
 	"github.com/ikenchina/octopus/define/proto/tcc/pb"
 )
 
+// Transaction
+// A distributed TCC transaction
 type Transaction struct {
 	biz  string
 	gtid string
@@ -25,6 +27,10 @@ type Transaction struct {
 	cli  *GrpcClient
 }
 
+// TccTransaction start a TCC transaction as a block,
+//   return TccResponse and error,
+//   transaction is aborted if error is not nil,
+//   TccResponse describes states of TCC transaction
 func TccTransaction(ctx context.Context, cli *GrpcClient, expire time.Time,
 	tryFunctions func(ctx context.Context, t *Transaction, gtid string) error) (*pb.TccResponse, error) {
 	t := &Transaction{
@@ -73,6 +79,15 @@ func TccTransaction(ctx context.Context, cli *GrpcClient, expire time.Time,
 	return confirm()
 }
 
+// TryGrpc invoke try method of grpc server of RM to start a branch transaction.
+//   branchID is unique identifier, ensure it is unique in a TCC transaction
+//   conn is grpc client connection of RM
+//   try is try method of grpc server
+//   confirm is confirm method of grpc server
+//   cancel is cancel method of grpc server
+//   request is request structure of try, confirm and cancel method
+//   response is response of try method
+//   opts set options of branch transaction
 func (t *Transaction) TryGrpc(branchID int, conn *grpc.ClientConn,
 	try string, confirm string, cancel string,
 	request proto.Message,
@@ -136,6 +151,14 @@ func (t *Transaction) try(branchID int,
 	return tryf(ctx)
 }
 
+// TryHttp invoke try method of http server of RM to start a branch transaction.
+//   branchID is unique identifier, ensure it is unique in a TCC transaction
+//   try is try URL of http server
+//   confirm is confirm URL of http server
+//   cancel is cancel URL of http server
+//   request is request structure of try, confirm and cancel
+//   response is response of try
+//   opts set options of branch transaction
 func (t *Transaction) TryHttp(branchID int,
 	try string, confirm string, cancel string,
 	payload []byte,

@@ -85,7 +85,7 @@ func (rm *SagaRmBankService) commitHandler(c *gin.Context) {
 	//
 	// execute in a transaction
 	//
-	err = sagarm.HandleCommit(c.Request.Context(), rm.db, gtid, branchID,
+	err = sagarm.HandleCommitOrm(c.Request.Context(), rm.db, gtid, branchID,
 		func(tx *gorm.DB) error {
 			txr := tx.Model(BankAccount{}).Where("id=?", request.UserID).
 				Update("balance", gorm.Expr("balance+?", request.Account))
@@ -127,7 +127,7 @@ func (rm *SagaRmBankService) compensationHandler(c *gin.Context) {
 	//logutil.Logger(c.Request.Context()).Sugar().Debugf("compensation : %s, %v, [%+v]",
 	//	gtid, branchID, request)
 
-	err = sagarm.HandleCompensation(c.Request.Context(), rm.db, gtid, branchID,
+	err = sagarm.HandleCompensationOrm(c.Request.Context(), rm.db, gtid, branchID,
 		func(tx *gorm.DB) error {
 			txr := tx.Model(BankAccount{}).Where("id=?", request.UserID).
 				Update("balance", gorm.Expr("balance+?", -1*request.Account))

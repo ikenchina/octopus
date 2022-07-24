@@ -83,7 +83,7 @@ func (rm *TccRmBankService) tryHandler(c *gin.Context) {
 	//
 	// execute in a transaction
 	//
-	err = tccrm.HandleTry(c.Request.Context(), rm.db, gtid, branchID,
+	err = tccrm.HandleTryOrm(c.Request.Context(), rm.db, gtid, branchID,
 		func(tx *gorm.DB) error {
 			txr := tx.Model(BankAccount{}).
 				//Where("id=? AND balance_freeze=0 AND balance+?>=0",
@@ -133,7 +133,7 @@ func (rm *TccRmBankService) confirmHandler(c *gin.Context) {
 	//
 	// execute in a transaction
 	//
-	err = tccrm.HandleConfirm(c.Request.Context(), rm.db, gtid, branchID,
+	err = tccrm.HandleConfirmOrm(c.Request.Context(), rm.db, gtid, branchID,
 		func(tx *gorm.DB) error {
 			// 将用户冻结资金加到账户余额中，同时清空冻结资金列
 			//
@@ -181,7 +181,7 @@ func (rm *TccRmBankService) cancelHandler(c *gin.Context) {
 		return
 	}
 
-	err = tccrm.HandleCancel(c.Request.Context(), rm.db, gtid, branchID,
+	err = tccrm.HandleCancelOrm(c.Request.Context(), rm.db, gtid, branchID,
 		func(tx *gorm.DB) error {
 			// 取消事务，将冻结资金列清空
 			txr := tx.Model(BankAccount{}).Where("id=?", request.UserID).Update(

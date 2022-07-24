@@ -10,7 +10,12 @@ import (
 	. "github.com/ikenchina/octopus/rm/common"
 )
 
-func HandleCommitRaw(ctx context.Context, db *sql.DB, gtid string, branchID int,
+// HandleCommit implement commit logical of RM as a block.
+//   db is database handle
+//   gtid is global identifier of saga transaction
+//   branchID is identifier of branch transaction
+//   commit is commit logical, saga transaction will be aborted if it returns error
+func HandleCommit(ctx context.Context, db *sql.DB, gtid string, branchID int,
 	commit func(*sql.Tx) error) error {
 
 	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
@@ -18,7 +23,7 @@ func HandleCommitRaw(ctx context.Context, db *sql.DB, gtid string, branchID int,
 		return err
 	}
 
-	txn, err := FindTransactionRaw(tx, gtid, branchID)
+	txn, err := FindTransaction(tx, gtid, branchID)
 	if err != nil {
 		return err
 	}
@@ -44,12 +49,14 @@ func HandleCommitRaw(ctx context.Context, db *sql.DB, gtid string, branchID int,
 	return err
 }
 
-func HandleCommit(ctx context.Context, db *gorm.DB, gtid string, branchID int,
+// HandleCommitOrm is same as HandleCommit
+//   db is database handle of gorm.DB
+func HandleCommitOrm(ctx context.Context, db *gorm.DB, gtid string, branchID int,
 	commit func(*gorm.DB) error) error {
 
 	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// check : status of try is running or is done
-		txn, err := FindTransaction(tx, gtid, branchID)
+		txn, err := FindTransactionOrm(tx, gtid, branchID)
 		if err != nil {
 			return err
 		}
@@ -82,7 +89,12 @@ func HandleCommit(ctx context.Context, db *gorm.DB, gtid string, branchID int,
 	return err
 }
 
-func HandleCompensationRaw(ctx context.Context, db *sql.DB, gtid string, branchID int,
+// HandleCommit implement commit logical of RM as a block.
+//   db is database handle
+//   gtid is global identifier of saga transaction
+//   branchID is identifier of branch transaction
+//   commit is commit logical, saga transaction will be aborted if it returns error
+func HandleCompensation(ctx context.Context, db *sql.DB, gtid string, branchID int,
 	compensate func(*sql.Tx) error) error {
 
 	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
@@ -90,7 +102,7 @@ func HandleCompensationRaw(ctx context.Context, db *sql.DB, gtid string, branchI
 		return err
 	}
 
-	txn, err := FindTransactionRaw(tx, gtid, branchID)
+	txn, err := FindTransaction(tx, gtid, branchID)
 	if err != nil {
 		return err
 	}
@@ -112,19 +124,21 @@ func HandleCompensationRaw(ctx context.Context, db *sql.DB, gtid string, branchI
 		return err
 	}
 
-	err = UpdateTransactionStateRaw(tx, gtid, branchID, define.TxnStateAborted)
+	err = UpdateTransactionState(tx, gtid, branchID, define.TxnStateAborted)
 	if err != nil {
 		return err
 	}
 	return tx.Commit()
 }
 
-func HandleCompensation(ctx context.Context, db *gorm.DB, gtid string, branchID int,
+// HandleCompensationOrm is same as HandleCompensation
+//   db is database handle of gorm.DB
+func HandleCompensationOrm(ctx context.Context, db *gorm.DB, gtid string, branchID int,
 	compensate func(*gorm.DB) error) error {
 
 	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// check : status of try is running or is done
-		txn, err := FindTransaction(tx, gtid, branchID)
+		txn, err := FindTransactionOrm(tx, gtid, branchID)
 		if err != nil {
 			return err
 		}
@@ -148,7 +162,7 @@ func HandleCompensation(ctx context.Context, db *gorm.DB, gtid string, branchID 
 			return err
 		}
 
-		return UpdateTransactionState(tx, gtid, branchID, define.TxnStateAborted)
+		return UpdateTransactionStateOrm(tx, gtid, branchID, define.TxnStateAborted)
 	}, &sql.TxOptions{
 		Isolation: sql.LevelRepeatableRead,
 	})

@@ -14,10 +14,13 @@ import (
 	pb "github.com/ikenchina/octopus/define/proto/saga/pb"
 )
 
+// GrpcClient is grpc client of SAGA AP
 type GrpcClient struct {
 	pb.TcClient
 }
 
+// NewGrpcClient create a grpc client
+//   target is address of grpc server
 func NewGrpcClient(target string) (*GrpcClient, error) {
 	conn, err := grpc.Dial(target, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
@@ -29,10 +32,12 @@ func NewGrpcClient(target string) (*GrpcClient, error) {
 	return cli, err
 }
 
+// HttpClient is http client of AP
 type HttpClient struct {
 	TcServer string
 }
 
+// Get get states of saga transaction
 func (cli *HttpClient) Get(ctx context.Context, gtid string) (*define.SagaResponse, error) {
 	url := cli.TcServer + "/dtx/saga/" + gtid
 	resp := &define.SagaResponse{}
@@ -46,6 +51,7 @@ func (cli *HttpClient) Get(ctx context.Context, gtid string) (*define.SagaRespon
 	return resp, nil
 }
 
+// NewGtid create a unique identifier for transaction
 func (cli *HttpClient) NewGtid(ctx context.Context) (string, error) {
 	url := cli.TcServer + "/dtx/saga/gtid"
 	mm := make(map[string]string)
@@ -64,6 +70,7 @@ func (cli *HttpClient) NewGtid(ctx context.Context) (string, error) {
 	return gtid, nil
 }
 
+// Commit commit saga transaction
 func (cli *HttpClient) Commit(ctx context.Context, req *define.SagaRequest) (*define.SagaResponse, error) {
 	url := cli.TcServer + "/dtx/saga"
 	data, err := json.Marshal(req)

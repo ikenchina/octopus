@@ -20,13 +20,13 @@ var (
 	ErrNotExist        = errors.New("not exist")
 )
 
+// SetDbSchema set database schema, only useful for postgreSQL
 func SetDbSchema(schema string) {
 	dbSchema = schema
 }
 
-// transaction
+// RmTransaction
 type RmTransaction struct {
-	Id    int64
 	Gtid  string
 	Bid   int
 	State string
@@ -39,17 +39,17 @@ func (*RmTransaction) TableName() string {
 	return dbSchema + ".rmtransaction"
 }
 
-func FindTransactionRaw(tx *sql.Tx, gtid string, branch int) (*RmTransaction, error) {
+func FindTransaction(tx *sql.Tx, gtid string, branch int) (*RmTransaction, error) {
 	t := &RmTransaction{}
-	row := tx.QueryRow("SELECT id, gtid, bid, state FROM $1 WHERE gtid=$2 AND bid=$3", t.TableName(), gtid, branch)
-	err := row.Scan(&t.Id, &t.Gtid, &t.Bid, &t.State)
+	row := tx.QueryRow("SELECT gtid, bid, state FROM $1 WHERE gtid=$2 AND bid=$3", t.TableName(), gtid, branch)
+	err := row.Scan(&t.Gtid, &t.Bid, &t.State)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	return t, err
 }
 
-func FindTransaction(tx *gorm.DB, gtid string, branch int) (*RmTransaction, error) {
+func FindTransactionOrm(tx *gorm.DB, gtid string, branch int) (*RmTransaction, error) {
 	txn := RmTransaction{}
 	txr := tx.Model(RmTransaction{}).Where("gtid=? AND bid=?", gtid, branch).Find(&txn)
 	if txr.Error != nil {
@@ -61,13 +61,12 @@ func FindTransaction(tx *gorm.DB, gtid string, branch int) (*RmTransaction, erro
 	return &txn, nil
 }
 
-func UpdateTransactionState(tx *gorm.DB, gtid string, branch int, state string) error {
-	txr := tx.Model(RmTransaction{}).Where("gtid=? AND bid=?",
-		gtid, branch).Update("state", state)
+func UpdateTransactionStateOrm(tx *gorm.DB, gtid string, branch int, state string) error {
+	txr := tx.Model(RmTransaction{}).Where("gtid=? AND bid=?", gtid, branch).Update("state", state)
 	return txr.Error
 }
 
-func UpdateTransactionStateRaw(tx *sql.Tx, gtid string, branch int, state string) error {
+func UpdateTransactionState(tx *sql.Tx, gtid string, branch int, state string) error {
 	rm := RmTransaction{}
 	rx, err := tx.Exec("UPDATE $1 SET state=$2 WHERE gtid=$3 AND bid=$4", rm.TableName(), state, gtid, branch)
 	if err != nil {

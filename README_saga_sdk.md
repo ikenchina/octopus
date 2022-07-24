@@ -130,7 +130,7 @@ func (t *Transaction) SetNotify(action string, timeout, retry time.Duration)
   - 返回值error：如果非nil则代表执行失败，TC可能会进行重试
 
 ```
-func HandleCommit(ctx context.Context, db *gorm.DB, gtid string, branchID int, requestBody string, 
+func HandleCommitOrm(ctx context.Context, db *gorm.DB, gtid string, branchID int, requestBody string, 
 	commit func(*gorm.DB) error) error 
 ```
 
@@ -147,7 +147,7 @@ func HandleCommit(ctx context.Context, db *gorm.DB, gtid string, branchID int, r
   - 返回值error：如果非nil则代表失败，TC会进行重试直到成功
 
 ```
-func HandleCompensation(ctx context.Context, db *gorm.DB, gtid string, branchID int, 
+func HandleCompensationOrm(ctx context.Context, db *gorm.DB, gtid string, branchID int, 
 	compensate func(*gorm.DB, string) error) error 
 ```
 

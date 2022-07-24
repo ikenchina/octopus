@@ -184,7 +184,7 @@ func (t *Transaction) Try(branchID int, try string, confirm string, cancel strin
 - 返回值：error非空则try失败
 
 ```
-func HandleTry(ctx context.Context, db *gorm.DB, gtid string, branchID int, tryBody string, 
+func HandleTryOrm(ctx context.Context, db *gorm.DB, gtid string, branchID int, tryBody string, 
 	try func(stx *gorm.DB) error) error 
 ```
 
@@ -200,7 +200,7 @@ func HandleTry(ctx context.Context, db *gorm.DB, gtid string, branchID int, tryB
 - 返回值：error代表confirm执行失败，TC会不断重试知道成功
 
 ```
-func HandleConfirm(ctx context.Context, db *gorm.DB, gtid string, branchID int, 
+func HandleConfirmOrm(ctx context.Context, db *gorm.DB, gtid string, branchID int, 
 	confirm func(stx *gorm.DB, tryBody string) error) error
 ```
 
@@ -216,7 +216,7 @@ func HandleConfirm(ctx context.Context, db *gorm.DB, gtid string, branchID int,
 - 返回值：error代表cancel执行失败，TC会不断重试知道成功
 
 ```
-func HandleCancel(ctx context.Context, db *gorm.DB, gtid string, branchID int, 
+func HandleCancelOrm(ctx context.Context, db *gorm.DB, gtid string, branchID int, 
 	cancel func(stx *gorm.DB, tryBody string) error) error 
 ```
 

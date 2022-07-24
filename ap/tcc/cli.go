@@ -15,10 +15,13 @@ import (
 	"github.com/ikenchina/octopus/define/proto/tcc/pb"
 )
 
+// GrpcClient is grpc client of TCC AP
 type GrpcClient struct {
 	pb.TcClient
 }
 
+// NewGrpcClient create a grpc client
+//   target is address of grpc server
 func NewGrpcClient(target string) (*GrpcClient, error) {
 	conn, err := grpc.Dial(target, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
@@ -35,22 +38,26 @@ type options struct {
 	retry   time.Duration
 }
 
+// WithTimeout set timeout duration
 func WithTimeout(timeout time.Duration) func(o *options) {
 	return func(o *options) {
 		o.timeout = timeout
 	}
 }
 
+// WithRetry set retry duration
 func WithRetry(retry time.Duration) func(o *options) {
 	return func(o *options) {
 		o.retry = retry
 	}
 }
 
+// HttpClient is http client of TCC AP
 type HttpClient struct {
 	TcServer string
 }
 
+// NewGtid create a unique identifier for transaction
 func (cli *HttpClient) NewGtid(ctx context.Context) (string, error) {
 	url := cli.TcServer + "/dtx/tcc/gtid"
 	mm := make(map[string]string)
@@ -65,6 +72,7 @@ func (cli *HttpClient) NewGtid(ctx context.Context) (string, error) {
 	return gtid, nil
 }
 
+// Get get states of saga transaction
 func (cli *HttpClient) Get(ctx context.Context, gtid string) (*define.TccResponse, error) {
 	url := cli.TcServer + "/dtx/tcc/" + gtid
 	resp := &define.TccResponse{}
@@ -75,6 +83,7 @@ func (cli *HttpClient) Get(ctx context.Context, gtid string) (*define.TccRespons
 	return resp, nil
 }
 
+// Prepare prepare transaction
 func (cli *HttpClient) Prepare(ctx context.Context, req *define.TccRequest) (*define.TccResponse, error) {
 	url := cli.TcServer + "/dtx/tcc"
 	data, err := json.Marshal(req)
@@ -90,6 +99,7 @@ func (cli *HttpClient) Prepare(ctx context.Context, req *define.TccRequest) (*de
 	return resp, nil
 }
 
+// Register register a branch transaction for TCC transaction
 func (cli *HttpClient) Register(ctx context.Context, gtid string, branch *define.TccBranch) (*define.TccResponse, error) {
 	url := cli.TcServer + "/dtx/tcc/" + gtid
 
@@ -114,6 +124,7 @@ func (cli *HttpClient) Register(ctx context.Context, gtid string, branch *define
 	return resp, nil
 }
 
+// Confirm commit TCC transaction
 func (cli *HttpClient) Confirm(ctx context.Context, gtid string) (*define.TccResponse, error) {
 	url := cli.TcServer + "/dtx/tcc/" + gtid
 	resp := &define.TccResponse{}
@@ -127,6 +138,7 @@ func (cli *HttpClient) Confirm(ctx context.Context, gtid string) (*define.TccRes
 	return resp, nil
 }
 
+// Cancel rollback TCC transaction
 func (cli *HttpClient) Cancel(ctx context.Context, gtid string) (*define.TccResponse, error) {
 	url := cli.TcServer + "/dtx/tcc/" + gtid
 	resp := &define.TccResponse{}

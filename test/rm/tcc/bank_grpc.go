@@ -35,7 +35,7 @@ func (rm *TccRmBankGrpcService) Try(ctx context.Context, request *pb.TccRequest)
 
 	gtid, branchID := sgrpc.ParseContextMeta(ctx)
 
-	err := tccrm.HandleTry(ctx, rm.db, gtid, branchID,
+	err := tccrm.HandleTryOrm(ctx, rm.db, gtid, branchID,
 		func(tx *gorm.DB) error {
 			txr := tx.Model(BankAccount{}).
 				//Where("id=? AND balance_freeze=0 AND balance+?>=0",
@@ -65,7 +65,7 @@ func (rm *TccRmBankGrpcService) Confirm(ctx context.Context, request *pb.TccRequ
 
 	gtid, branchID := sgrpc.ParseContextMeta(ctx)
 
-	err := tccrm.HandleConfirm(ctx, rm.db, gtid, branchID,
+	err := tccrm.HandleConfirmOrm(ctx, rm.db, gtid, branchID,
 		func(tx *gorm.DB) error {
 			// 将用户冻结资金加到账户余额中，同时清空冻结资金列
 			//
@@ -97,7 +97,7 @@ func (rm *TccRmBankGrpcService) Cancel(ctx context.Context, request *pb.TccReque
 
 	gtid, branchID := sgrpc.ParseContextMeta(ctx)
 
-	err := tccrm.HandleCancel(ctx, rm.db, gtid, branchID,
+	err := tccrm.HandleCancelOrm(ctx, rm.db, gtid, branchID,
 		func(tx *gorm.DB) error {
 			// 取消事务，将冻结资金列清空
 			txr := tx.Model(BankAccount{}).Where("id=?", request.GetUserId()).Update(

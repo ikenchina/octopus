@@ -32,7 +32,7 @@ func NewSagaRmBankGrpcService(listen string, db *gorm.DB) *SagaRmBankGrpcService
 func (rm *SagaRmBankGrpcService) In(ctx context.Context, in *pb.SagaRequest) (*pb.SagaResponse, error) {
 	gtid, bid := cgrpc.ParseContextMeta(ctx)
 	resp := &pb.SagaResponse{}
-	err := sagarm.HandleCommit(ctx, rm.db, gtid, bid, func(tx *gorm.DB) error {
+	err := sagarm.HandleCommitOrm(ctx, rm.db, gtid, bid, func(tx *gorm.DB) error {
 		txr := tx.Model(BankAccount{}).Where("id=?", in.GetUserId()).
 			Update("balance", gorm.Expr("balance+?", in.GetAccount()))
 		if txr.Error != nil {
@@ -52,7 +52,7 @@ func (rm *SagaRmBankGrpcService) Out(ctx context.Context, in *pb.SagaRequest) (*
 	gtid, bid := cgrpc.ParseContextMeta(ctx)
 	resp := &pb.SagaResponse{}
 
-	err := sagarm.HandleCompensation(ctx, rm.db, gtid, bid, func(tx *gorm.DB) error {
+	err := sagarm.HandleCompensationOrm(ctx, rm.db, gtid, bid, func(tx *gorm.DB) error {
 		txr := tx.Model(BankAccount{}).Where("id=?", in.GetUserId()).
 			Update("balance", gorm.Expr("balance+?", -1*in.GetAccount()))
 		if txr.Error != nil {

@@ -169,12 +169,11 @@ func (ms *modelStorage) FindPreparedExpired(ctx context.Context, txnType string,
 	ctx, cancel := ms.timeoutContext(ctx)
 	defer cancel()
 
-	//states := []string{define.TxnStateCommitted, define.TxnStateAborted}
 	txns = make([]*Txn, 0)
 	err = ms.Db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 
 		txa := tx.Model(&Txn{}).Where("txn_type = ? AND state='prepared' AND expire_time < NOW()", txnType)
-		txa.Order("id DESC").Limit(limit) // ORDER BY id DESC
+		txa.Order("expire_time DESC").Limit(limit) // ORDER BY id DESC
 		txr := txa.Find(&txns)
 		if txr.Error != nil {
 			return txr.Error
@@ -208,7 +207,7 @@ func (ms *modelStorage) FindRunningLeaseExpired(ctx context.Context, txnType str
 	txns = make([]*Txn, 0)
 	err = ms.Db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		txa := tx.Model(&Txn{}).Where("txn_type = ? AND state NOT IN ('committed', 'aborted', 'prepared') AND lease_expire_time < NOW()", txnType)
-		txa.Order("id DESC").Limit(limit)
+		txa.Order("lease_expire_time DESC").Limit(limit)
 		txr := txa.Find(&txns)
 		if txr.Error != nil {
 			return txr.Error
@@ -241,7 +240,7 @@ func (ms *modelStorage) CleanExpiredTxns(ctx context.Context, txnType string, un
 	txns = make([]*Txn, 0)
 	err = ms.Db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		txa := tx.Model(&Txn{}).Where("txn_type = ? AND state IN ('committed', 'aborted') AND expire_time < ?", txnType, untilTime)
-		txa.Order("id ASC").Limit(limit)
+		txa.Order("expire_time ASC").Limit(limit)
 		txr := txa.Find(&txns)
 		if txr.Error != nil {
 			return txr.Error

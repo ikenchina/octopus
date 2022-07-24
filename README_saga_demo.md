@@ -84,7 +84,7 @@ RM由员工账户所属银行来实现。
 
 RM需要提供 `commit`和`compensation`接口给TC调用来提交子事务。
 
-直接使用octopus/rm/saga下的wrapper.go的`HandleCommit`和`HandleCompensation`来实现接口。
+直接使用octopus/rm/saga下的wrapper.go的`HandleCommitOrm`和`HandleCompensationOrm`来实现接口。
 
 参考：`octopus/test/utils/saga/bank_rm.go`
 
@@ -153,7 +153,7 @@ func (rm *RmService) commitHandler(c *gin.Context) {
 	// 调用HandleCommit
 	// gtid和branchID作为branch的全局id，body是commit的请求body
 	// func(*gorm.DB)error 是RM实现commit的业务逻辑，此逻辑会在一个数据库事务中执行
-	err = sagarm.HandleCommit(c.Request.Context(), rm.Db, gtid, branchID, string(body),
+	err = sagarm.HandleCommitOrm(c.Request.Context(), rm.Db, gtid, branchID, string(body),
 		func(tx *gorm.DB) error {
 		
 			// 直接更新用户银行账号余额，给员工发工资
@@ -195,7 +195,7 @@ func (rm *RmService) compensationHandler(c *gin.Context) {
 	code := http.StatusOK
 
 	// 调用HandleCompensation
-	err := sagarm.HandleCompensation(c.Request.Context(), rm.Db, gtid, branchID,
+	err := sagarm.HandleCompensationOrm(c.Request.Context(), rm.Db, gtid, branchID,
 	
 		// compensation实现的业务逻辑，逻辑会在一个事务中执行
 		// body是commit请求时的body，由AP提供
