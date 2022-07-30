@@ -49,10 +49,7 @@ func unaryClientInterceptor(opts0 ...grpc.CallOption) grpc.UnaryClientIntercepto
 	}
 }
 
-// @todo cache clients
-func Invoke(ctx context.Context, domain string, gtid string,
-	bid int, method string, payload []byte) ([]byte, error) {
-
+func getGrpcConn(domain string) (*grpc.ClientConn, error) {
 	val, ok := connPools.Get(domain)
 	if !ok {
 		dialOptions := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
@@ -64,19 +61,32 @@ func Invoke(ctx context.Context, domain string, gtid string,
 		if err != nil {
 			return nil, err
 		}
-		connPools.Add(domain, cc)
-		val = cc
+
+		c2, ok, _ := connPools.PeekOrAdd(domain, cc)
+		if ok {
+			cc.Close()
+			val = c2
+		} else {
+			val = cc
+		}
 	}
 
-	ctx = context.WithValue(ctx, consistentbalancer.CtxKey, []byte(gtid))
+	return val.(*grpc.ClientConn), nil
+}
 
-	cc := val.(*grpc.ClientConn)
+func Invoke(ctx context.Context, domain string, gtid string,
+	bid int, method string, payload []byte) ([]byte, error) {
+
+	ctx = context.WithValue(ctx, consistentbalancer.CtxKey, []byte(gtid))
+	cc, err := getGrpcConn(domain)
+	if err != nil {
+		return nil, err
+	}
+
 	out := []byte{}
 	in := payload
-
-	ctx = metadata.AppendToOutgoingContext(ctx, GRPC_HREADER_GTID, gtid,
-		GRPC_HREADER_BRANCHID, strconv.Itoa(bid))
-	err := grpc.Invoke(ctx, method, in, &out, cc, grpc.WaitForReady(true))
+	ctx = metadata.AppendToOutgoingContext(ctx, GRPC_HREADER_GTID, gtid, GRPC_HREADER_BRANCHID, strconv.Itoa(bid))
+	err = grpc.Invoke(ctx, method, in, &out, cc, grpc.WaitForReady(true))
 	return out, err
 }
 
@@ -86,6 +96,7 @@ type customPbCodec struct {
 func (c customPbCodec) Name() string {
 	return "proto"
 }
+
 func (c customPbCodec) Marshal(v interface{}) ([]byte, error) {
 	switch tv := v.(type) {
 	case []byte:

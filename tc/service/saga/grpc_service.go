@@ -56,8 +56,10 @@ func (ss *SagaService) Commit(ctx context.Context, in *tc_rpc.SagaRequest) (*tc_
 		return nil, status.Error(ss.toGrpcStatusCode(err), err.Error())
 	}
 
-	resp := &tc_rpc.SagaResponse{}
-	ss.parsePbFromModel(resp, future.Txn)
+	resp := &tc_rpc.SagaResponse{
+		Saga: &tc_rpc.Saga{},
+	}
+	ss.parsePbFromModel(resp.Saga, future.Txn)
 	return resp, nil
 }
 
@@ -75,8 +77,10 @@ func (ss *SagaService) Get(ctx context.Context, in *tc_rpc.SagaRequest) (*tc_rpc
 		return nil, status.Error(ss.toGrpcStatusCode(err), err.Error())
 	}
 
-	resp := &tc_rpc.SagaResponse{}
-	ss.parsePbFromModel(resp, saga)
+	resp := &tc_rpc.SagaResponse{
+		Saga: &tc_rpc.Saga{},
+	}
+	ss.parsePbFromModel(resp.Saga, saga)
 	return resp, nil
 }
 

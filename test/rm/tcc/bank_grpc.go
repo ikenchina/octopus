@@ -2,6 +2,7 @@ package tcc
 
 import (
 	"context"
+	"database/sql"
 	"net"
 
 	"google.golang.org/grpc"
@@ -58,6 +59,31 @@ func (rm *TccRmBankGrpcService) Try(ctx context.Context, request *pb.TccRequest)
 	logutil.Logger(ctx).Sugar().Debugf("grpc try : %s, %v, %v", gtid, branchID, err)
 
 	return &pb.TccResponse{}, nil
+}
+
+func (rm *TccRmBankGrpcService) Try2(ctx context.Context, request *pb.TccRequest) (*pb.TccResponse, error) {
+	defer rmExecTimer.Timer()("try")
+
+	gtid, branchID := sgrpc.ParseContextMeta(ctx)
+	db, _ := rm.db.DB()
+
+	err := tccrm.HandleTry(ctx, db, gtid, branchID,
+		func(tx *sql.Tx) error {
+			rx, err := tx.Exec("UPDATE account SET balance_freeze=$1 WHERE id=$2 AND balance_freeze=0",
+				request.GetAccount(), request.GetUserId())
+			if err != nil {
+				return status.Error(codes.Internal, err.Error())
+			}
+			ar, err := rx.RowsAffected()
+			if err != nil {
+				return status.Error(codes.Internal, err.Error())
+			}
+			if ar == 0 {
+				return status.Error(codes.NotFound, "user does not exist")
+			}
+			return nil
+		})
+	return &pb.TccResponse{}, err
 }
 
 func (rm *TccRmBankGrpcService) Confirm(ctx context.Context, request *pb.TccRequest) (*pb.TccResponse, error) {

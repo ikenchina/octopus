@@ -23,7 +23,7 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ApClient interface {
-	Notify(ctx context.Context, in *ApRequest, opts ...grpc.CallOption) (*empty.Empty, error)
+	Notify(ctx context.Context, in *ApNotifyRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 }
 
 type apClient struct {
@@ -34,7 +34,7 @@ func NewApClient(cc grpc.ClientConnInterface) ApClient {
 	return &apClient{cc}
 }
 
-func (c *apClient) Notify(ctx context.Context, in *ApRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+func (c *apClient) Notify(ctx context.Context, in *ApNotifyRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
 	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/saga.Ap/Notify", in, out, opts...)
 	if err != nil {
@@ -47,7 +47,7 @@ func (c *apClient) Notify(ctx context.Context, in *ApRequest, opts ...grpc.CallO
 // All implementations must embed UnimplementedApServer
 // for forward compatibility
 type ApServer interface {
-	Notify(context.Context, *ApRequest) (*empty.Empty, error)
+	Notify(context.Context, *ApNotifyRequest) (*empty.Empty, error)
 	mustEmbedUnimplementedApServer()
 }
 
@@ -55,7 +55,7 @@ type ApServer interface {
 type UnimplementedApServer struct {
 }
 
-func (UnimplementedApServer) Notify(context.Context, *ApRequest) (*empty.Empty, error) {
+func (UnimplementedApServer) Notify(context.Context, *ApNotifyRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Notify not implemented")
 }
 func (UnimplementedApServer) mustEmbedUnimplementedApServer() {}
@@ -72,7 +72,7 @@ func RegisterApServer(s grpc.ServiceRegistrar, srv ApServer) {
 }
 
 func _Ap_Notify_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ApRequest)
+	in := new(ApNotifyRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -84,7 +84,7 @@ func _Ap_Notify_Handler(srv interface{}, ctx context.Context, dec func(interface
 		FullMethod: "/saga.Ap/Notify",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ApServer).Notify(ctx, req.(*ApRequest))
+		return srv.(ApServer).Notify(ctx, req.(*ApNotifyRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }

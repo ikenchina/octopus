@@ -11,7 +11,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"gorm.io/gorm"
 
-	httputil "github.com/ikenchina/octopus/common/http"
 	logutil "github.com/ikenchina/octopus/common/log"
 
 	"github.com/ikenchina/octopus/common/metrics"
@@ -56,23 +55,32 @@ func (rm *TccRmBankService) Start() error {
 	return rm.httpServer.ListenAndServe()
 }
 
-func (rm *TccRmBankService) tryHandler(c *gin.Context) {
-	defer rmExecTimer.Timer()("try")
-
-	body, err := c.GetRawData()
+func (rm *TccRmBankService) parseRequest(c *gin.Context) (gtid string, bid int, req *BankAccountRecord, err error) {
+	body := []byte{}
+	body, err = c.GetRawData()
 	if err != nil {
-		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
 	request := &BankAccountRecord{}
 	err = json.Unmarshal(body, request)
 	if err != nil {
+		return
+	}
+
+	gtid = c.Param("gtid")
+	bid, _ = strconv.Atoi(c.Param("branch_id"))
+	return
+}
+
+func (rm *TccRmBankService) tryHandler(c *gin.Context) {
+	defer rmExecTimer.Timer()("try")
+
+	gtid, branchID, request, err := rm.parseRequest(c)
+	if err != nil {
 		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
 
-	gtid := c.Param("gtid")
-	branchID, _ := strconv.Atoi(c.Param("branch_id"))
 	logutil.Logger(c.Request.Context()).Sugar().Debugf("try : %s %d", gtid, branchID)
 	if request.Fail {
 		c.AbortWithStatus(http.StatusInternalServerError)
@@ -118,17 +126,12 @@ func (rm *TccRmBankService) tryHandler(c *gin.Context) {
 func (rm *TccRmBankService) confirmHandler(c *gin.Context) {
 	defer rmExecTimer.Timer()("confirm")
 
-	gtid := c.Param("gtid")
-	branchID, _ := strconv.Atoi(c.Param("branch_id"))
-	logutil.Logger(c.Request.Context()).Sugar().Debugf("confirm : %s %d", gtid, branchID)
-	code := http.StatusOK
-
-	request := &BankAccountRecord{}
-	err := httputil.ParseHttpJsonRequest(c, request)
+	gtid, branchID, request, err := rm.parseRequest(c)
 	if err != nil {
 		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
+	code := http.StatusOK
 
 	//
 	// execute in a transaction
@@ -169,17 +172,13 @@ func (rm *TccRmBankService) confirmHandler(c *gin.Context) {
 func (rm *TccRmBankService) cancelHandler(c *gin.Context) {
 	defer rmExecTimer.Timer()("cancel")
 
-	gtid := c.Param("gtid")
-	branchID, _ := strconv.Atoi(c.Param("branch_id"))
-	code := http.StatusOK
-	logutil.Logger(c.Request.Context()).Sugar().Debugf("cancel : %s %s", gtid, branchID)
-
-	request := &BankAccountRecord{}
-	err := httputil.ParseHttpJsonRequest(c, request)
+	gtid, branchID, request, err := rm.parseRequest(c)
 	if err != nil {
 		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
+	code := http.StatusOK
+	logutil.Logger(c.Request.Context()).Sugar().Debugf("cancel : %s %s", gtid, branchID)
 
 	err = tccrm.HandleCancelOrm(c.Request.Context(), rm.db, gtid, branchID,
 		func(tx *gorm.DB) error {
@@ -208,7 +207,6 @@ func (rm *TccRmBankService) cancelHandler(c *gin.Context) {
 	}
 
 	logutil.Logger(c.Request.Context()).Sugar().Debugf("cancel try : %s, %v, %v", gtid, branchID, err)
-
 }
 
 type BankAccount struct {

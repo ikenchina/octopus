@@ -19,6 +19,7 @@ import (
 	executor "github.com/ikenchina/octopus/tc/app/executor"
 	"github.com/ikenchina/octopus/tc/app/model"
 	"github.com/ikenchina/octopus/tc/config"
+	"google.golang.org/protobuf/proto"
 )
 
 type SagaService struct {
@@ -130,12 +131,35 @@ func (ss *SagaService) notifyHandle() {
 }
 
 func (ss *SagaService) grpcHandle(sn *executor.ActionNotify, domain, method string) {
-	resp, err := sgrpc.Invoke(sn.Ctx, domain, sn.Txn().Gtid, sn.BranchID, method, sn.Payload)
+	if sn.BranchType == define.BranchTypeCommit || sn.BranchType == define.BranchTypeCompensation {
+		resp, err := sgrpc.Invoke(sn.Ctx, domain, sn.Txn().Gtid, sn.BranchID, method, sn.Payload)
+		if err != nil {
+			sn.Done(err, nil)
+			return
+		}
+		sn.Done(nil, (resp))
+	} else { // notify
+		ss.grpcNotifyAction(sn, domain, method)
+	}
+}
+
+func (ss *SagaService) grpcNotifyAction(sn *executor.ActionNotify, domain, method string) {
+	req := &tc_rpc.ApNotifyRequest{
+		Saga: &tc_rpc.Saga{},
+	}
+	ss.parsePbFromModel(req.Saga, sn.Txn())
+	payload, err := proto.Marshal(req)
 	if err != nil {
 		sn.Done(err, nil)
 		return
 	}
-	sn.Done(nil, (resp))
+
+	_, err = sgrpc.Invoke(sn.Ctx, domain, sn.Txn().Gtid, sn.BranchID, method, payload)
+	if err != nil {
+		sn.Done(err, nil)
+		return
+	}
+	sn.Done(nil, nil)
 }
 
 func (ss *SagaService) httpHandle(sn *executor.ActionNotify) {

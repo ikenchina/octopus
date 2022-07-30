@@ -6,9 +6,9 @@ import "google/protobuf/empty.proto";
 import "common.proto";
 
 service Ap {
-    rpc Notify(ApRequest) returns (google.protobuf.Empty) {}
+    rpc Notify(ApNotifyRequest) returns (google.protobuf.Empty) {}
 }
 
-message ApRequest {
+message ApNotifyRequest {
     Saga saga = 1;
 }

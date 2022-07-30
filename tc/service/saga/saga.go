@@ -9,7 +9,6 @@ import (
 
 	"github.com/ikenchina/octopus/common/util"
 	"github.com/ikenchina/octopus/define"
-	"github.com/ikenchina/octopus/define/proto/saga/pb"
 	tc_rpc "github.com/ikenchina/octopus/define/proto/saga/pb"
 	"github.com/ikenchina/octopus/tc/app/model"
 )
@@ -315,17 +314,13 @@ func (ss *SagaService) convertBranchPbToModel(in *tc_rpc.SagaBranchRequest, gtid
 	return branches, nil
 }
 
-func (ss *SagaService) parsePbFromModel(out *tc_rpc.SagaResponse, sm *model.Txn) {
+func (ss *SagaService) parsePbFromModel(out *tc_rpc.Saga, sm *model.Txn) {
 	if sm == nil {
 		return
 	}
 
-	if out.Saga == nil {
-		out.Saga = &pb.Saga{}
-	}
-
-	out.Saga.Gtid = sm.Gtid
-	out.Saga.State = sm.State
+	out.Gtid = sm.Gtid
+	out.State = sm.State
 
 	bm := make(map[int]*model.Branch)
 	for _, b := range sm.Branches {
@@ -344,7 +339,7 @@ func (ss *SagaService) parsePbFromModel(out *tc_rpc.SagaResponse, sm *model.Txn)
 		if rollback.State == define.TxnStateCommitted {
 			state = define.TxnStateAborted
 		}
-		out.Saga.Branches = append(out.Saga.Branches,
+		out.Branches = append(out.Branches,
 			&tc_rpc.SagaBranch{
 				BranchId: int32(bb.Bid),
 				State:    state,

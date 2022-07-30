@@ -118,13 +118,13 @@ func WithConstantRetry(dur time.Duration) branchFunctions {
 	}
 }
 
-// NewGrpcBranch create a branch transaction for RM(resource manager) which is a grpc server
+// AddGrpcBranch create a branch transaction for RM(resource manager) which is a grpc server
 //  branchID is unique identifier, ensure it is unique in a saga transaction
 //  rmServer is grpc target of RM,
 //  commitAction is grpc method to commit branch transaction
 //  compensationAction is grpc method to compensate branch transaction
 //  payload is request of grpc method to commit or compensate
-func (t *Transaction) NewGrpcBranch(branchID int, rmServer string,
+func (t *Transaction) AddGrpcBranch(branchID int, rmServer string,
 	commitAction string, compensationAction string,
 	payload proto.Message,
 	opts ...branchFunctions) {
@@ -171,12 +171,12 @@ func (t *Transaction) NewGrpcBranch(branchID int, rmServer string,
 	t.Request.Branches = append(t.Request.Branches, branch)
 }
 
-// NewHttpBranch create a branch transaction for RM(resource manager) which is a http server
+// AddHttpBranch create a branch transaction for RM(resource manager) which is a http server
 //  branchID is unique identifier, ensure it is unique in a saga transaction
 //  commitAction is URL to commit branch transaction with http POST method
 //  compensationAction is URL to compensate branch transaction with http DELETE method
 //  payload is http request body for commit or compensate actions
-func (t *Transaction) NewHttpBranch(branchID int,
+func (t *Transaction) AddHttpBranch(branchID int,
 	commitAction string, compensationAction string,
 	payload []byte,
 	opts ...branchFunctions) {

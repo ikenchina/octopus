@@ -28,16 +28,16 @@ func (app *SagaApplication) Pay(users []*saga_rm.BankAccountRecord) (*pb.SagaRes
 
 			for i, user := range users {
 				branchID := i + 1
-				host := app.banks[int(math.Abs(float64(user.UserID)))%len(app.banks)]
+				host := app.getUserBank(user.UserID)
 				if host.Protocol == "grpc" {
 					commit := "/bankservice.SagaBankService/In"
 					compensation := "/bankservice.SagaBankService/Out"
 					payload := user.ToPb()
-					t.NewGrpcBranch(branchID, host.Target, commit, compensation, payload, saga_cli.WithMaxRetry(1))
+					t.AddGrpcBranch(branchID, host.Target, commit, compensation, payload, saga_cli.WithMaxRetry(1))
 				} else if host.Protocol == "http" {
 					actionURL := fmt.Sprintf("%s%s/%s/%d", host.Target, saga_rm.SagaRmBankServiceBasePath, gtid, branchID)
 					payload := jsonMarshal(user)
-					t.NewHttpBranch(branchID, actionURL, actionURL, payload, saga_cli.WithMaxRetry(1))
+					t.AddHttpBranch(branchID, actionURL, actionURL, payload, saga_cli.WithMaxRetry(1))
 				}
 			}
 			return nil
@@ -47,6 +47,10 @@ func (app *SagaApplication) Pay(users []*saga_rm.BankAccountRecord) (*pb.SagaRes
 	}
 	app.updateStateToDb(resp.Saga.GetGtid(), resp.Saga.GetState())
 	return resp, err
+}
+
+func (app *SagaApplication) getUserBank(userID int) Bank {
+	return app.banks[int(math.Abs(float64(userID)))%len(app.banks)]
 }
 
 func (app *SagaApplication) InitTcClient(tcDomain string) (err error) {

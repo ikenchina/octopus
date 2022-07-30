@@ -1,3 +1,10 @@
+- [Orchestration-based saga](#orchestration-based-saga)
+  - [理论](#理论)
+  - [设计](#设计)
+    - [基础概念](#基础概念)
+    - [Saga事务协调者的实现](#saga事务协调者的实现)
+    - [异常情况处理](#异常情况处理)
+
 # Orchestration-based saga
 
 
@@ -78,8 +85,7 @@ Saga事务由三种角色组成
 
 - committed : 已经提交。最终态
 - aborted ： 已经回滚。最终态
-- failed ： 回滚中或提交失败(可能重试中)。非终态
-- prepared：提交中。非终态
+- committing ：提交中。非终态
 
 
 
@@ -139,31 +145,5 @@ Saga事务由三种角色组成
   - 如果没有rollback记录，且此子事务没有执行过commit操作，则执行commit操作
 
 RM在执行commit和rollback操作，事务的状态更改需要保证原子性和隔离性，最好依赖数据库的事务来实现。
-
-
----------------
-
-
-## 开发示例
-
-以公司给员工发薪水作为示例，演示如何通过SDK来实现一个saga事务。
-此演示使用了SDK的高级API，屏蔽了各种异常情况的处理，提高了开发的效率。
-
-[开发示例](README_saga_demo.md)
-
-
-
-## client SDK
-
-client sdk实现了AP和RM的sdk封装，方便进行saga开发。
-
-[client SDK](README_saga_sdk.md)
-
-
-
-## API 设计
-
-[API设计](README_saga_api.md)
-
 
 
