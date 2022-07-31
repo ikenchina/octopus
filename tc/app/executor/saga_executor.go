@@ -378,17 +378,6 @@ func (se *SagaExecutor) commitBranch(task *actionTask, branch *model.Branch) err
 			branch.State = define.TxnStateRolling
 		}
 	}
-	// branch.SetState(define.TxnStateRolling)
-	// err2 := se.cfg.Store.UpdateBranchConditions(task.Ctx, branch,
-	// 	func(oldTxn *model.Txn, oldBranch *model.Branch) error {
-	// 		if !slice.Contain([]string{define.committing, define.TxnStatePreAborted}, oldBranch.State) {
-	// 			return ErrInvalidState
-	// 		}
-	// 		return nil
-	// 	})
-	// if se.finishTaskFatalError(task, err2) { // ignore other errors
-	// 	return err2
-	// }
 
 	se.schedule(task, se.branchRetry(branch))
 	return err
@@ -461,10 +450,9 @@ func (se *SagaExecutor) notify(task *actionTask) (err error) {
 }
 
 func (se *SagaExecutor) branchRetry(branch *model.Branch) time.Duration {
-	if branch.CanTry() {
-		if branch.Retry.Constant != nil {
-			return branch.Retry.Constant.Duration
-		}
+	if branch.Retry.Constant != nil {
+		return branch.Retry.Constant.Duration
 	}
-	return time.Millisecond * 100
+
+	return time.Millisecond * 500
 }

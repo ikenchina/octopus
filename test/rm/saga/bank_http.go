@@ -20,7 +20,7 @@ import (
 var (
 	SagaRmBankServiceBasePath = "/paywage/saga"
 
-	rmExecTimer = metrics.NewTimer("dtx", "saga_rm_txn", "rm timer", []string{"branch"})
+	rmExecTimer = metrics.NewTimer("dtx", "rm", "saga_rm_txn", "rm timer", []string{"branch"})
 )
 
 type BankAccountRecord struct {

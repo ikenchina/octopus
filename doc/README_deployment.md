@@ -4,6 +4,7 @@
     - [部署TC二进制](#部署tc二进制)
     - [TC配置](#tc配置)
     - [TC监控](#tc监控)
+  - [部署RM](#部署rm)
 
 
 # 部署
@@ -114,5 +115,23 @@ curl -XGET http://localhost:18089/debug/healthcheck
 ### TC监控
 
 如果配置中配置了"HttpListen"，则可以通过`/debug/metrics`来导出prometheus的数据。
+
+
+
+
+## 部署RM
+
+
+如果开发者不使用rm package提供的`Handle*`系列方法，则不需要创建子事务表。    
+开发者可以自己实现`Handle*`相关的事务逻辑，只需要保证幂和避免乱序等异常即可(根据gtid和branch id)。 
+
+如果开发者使用`Handle*`系列方法，则需要创建子事务表。    
+如果是PostgreSQL数据库，则根据`octopus/rm/deployment/postgreSQL.sql`来创建。
+
+建议开发者使用`Handle*`系列方法，因为其处理了乱序等异常情况。
+
+
+
+
 
 

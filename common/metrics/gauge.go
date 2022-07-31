@@ -8,9 +8,10 @@ type GaugeVec struct {
 	gauges *prometheus.GaugeVec
 }
 
-func NewGaugeVec(namespace, metricsName, help string, labels []string) *GaugeVec {
+func NewGaugeVec(namespace, subsystem, metricsName, help string, labels []string) *GaugeVec {
 	cc := prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
+		Subsystem: subsystem,
 		Name:      metricsName + "_g",
 		Help:      help + " (gauges)",
 	}, labels)

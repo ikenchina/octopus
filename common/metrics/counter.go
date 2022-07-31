@@ -8,9 +8,10 @@ type CounterVec struct {
 	counters *prometheus.CounterVec
 }
 
-func NewCounterVec(namespace, metricsName, help string, labels []string) *CounterVec {
+func NewCounterVec(namespace, subsystem, metricsName, help string, labels []string) *CounterVec {
 	cc := prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: namespace,
+		Subsystem: subsystem,
 		Name:      metricsName + "_c",
 		Help:      help + " (counters)",
 	}, labels)

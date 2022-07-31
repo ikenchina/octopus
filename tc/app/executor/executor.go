@@ -29,10 +29,10 @@ var (
 )
 
 var (
-	txnTimer       = metrics.NewTimer("dtx", "txn", "txn timer", []string{"type", "op"})
-	branchTimer    = metrics.NewTimer("dtx", "branch", "branch timer", []string{"type", "branch"})
-	stateGauge     = metrics.NewGaugeVec("dtx", "txn", "state", []string{"type", "state"})
-	processCounter = metrics.NewCounterVec("dtx", "process", "process count", []string{"type"})
+	txnTimer       = metrics.NewTimer("dtx", "tc", "txn", "txn timer", []string{"type", "op"})
+	branchTimer    = metrics.NewTimer("dtx", "tc", "branch", "branch timer", []string{"type", "branch"})
+	stateGauge     = metrics.NewGaugeVec("dtx", "tc", "txn_state", "state", []string{"type", "state"})
+	processCounter = metrics.NewCounterVec("dtx", "tc", "process", "process count", []string{"type"})
 )
 
 type Config struct {

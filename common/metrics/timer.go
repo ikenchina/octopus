@@ -27,13 +27,14 @@ func WithTimerConstLabels(lables map[string]string) TimerOption {
 }
 
 // NewTimer
-func NewTimer(namespace, metricName, help string, labels []string, opts ...TimerOption) *Timer {
+func NewTimer(namespace, subsystem, metricName, help string, labels []string, opts ...TimerOption) *Timer {
 	// histogram
 	timerOpts := timerOptions{}
 	for _, opt := range opts {
 		opt(&timerOpts)
 	}
 	hisOpts := prometheus.HistogramOpts{
+		Subsystem:   subsystem,
 		Namespace:   namespace,
 		Name:        metricName + "_h",
 		Help:        help + " (histogram)",

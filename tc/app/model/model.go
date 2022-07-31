@@ -27,7 +27,7 @@ var (
 )
 
 var (
-	sagaModelTimer = metrics.NewTimer("dtx", "saga_model", "saga model timer", []string{"op", "ret"})
+	sagaModelTimer = metrics.NewTimer("dtx", "tc", "saga_model", "saga model timer", []string{"op", "ret"})
 )
 
 type ModelStorage interface {

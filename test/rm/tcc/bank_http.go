@@ -20,7 +20,7 @@ import (
 var (
 	TccRmBankServiceBasePath = "/transfer/tcc"
 
-	rmExecTimer = metrics.NewTimer("dtx", "tcc_rm_txn", "rm timer", []string{"branch"})
+	rmExecTimer = metrics.NewTimer("dtx", "rm", "tcc_rm_txn", "rm timer", []string{"branch"})
 )
 
 type BankAccountRecord struct {

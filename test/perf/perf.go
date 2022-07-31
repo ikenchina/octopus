@@ -282,5 +282,5 @@ func extractListen(listen string) (string, string) {
 }
 
 var (
-	apTimer = metrics.NewTimer("dtx", "ap", "ap timer", []string{"state", "ret"})
+	apTimer = metrics.NewTimer("dtx", "ap", "consume", "ap timer", []string{"state", "ret"})
 )

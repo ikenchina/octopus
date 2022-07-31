@@ -243,5 +243,5 @@ func (tc *TcService) HealthCheck(c *gin.Context) {
 }
 
 var (
-	httpHandleTimer = metrics.NewTimer("dtx", "http_server", "http handler metrics", []string{"path", "method", "code"})
+	httpHandleTimer = metrics.NewTimer("dtx", "tc", "http_server", "http handler metrics", []string{"path", "method", "code"})
 )

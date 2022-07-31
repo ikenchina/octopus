@@ -12,7 +12,7 @@ import (
 )
 
 func (app *Application) InitHttp(listen string) error {
-	app.notifyUrl = fmt.Sprintf("http://test.ap.dtx.tt%s/saga/notify", listen)
+	app.notifyUrl = fmt.Sprintf("http://localhost%s/saga/notify", listen)
 	ginApp := gin.New()
 	ginApp.POST("/saga/notify", app.notifyHandler)
 	ginApp.GET("/debug/metrics", gin.WrapH(promhttp.Handler()))
