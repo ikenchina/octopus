@@ -2,8 +2,8 @@
     "Ap": {
         "Listen": ":28090",
         "Dsn": "postgresql://dtx_user:dtx_pass@127.0.0.1:5432/dtx?connect_timeout=3",
-        "Qps": 50,
-        "Concurrency": 50,
+        "Qps": 3,
+        "Concurrency": 3,
         "UserRange": [
             1,
             10000
@@ -18,21 +18,21 @@
             "Dsn": "postgresql://dtx_user:dtx_pass@127.0.0.1:5432/dtx?connect_timeout=3",
             "MaxConnections": 3,
             "MaxIdleConnections": 3,
-            "Protocol" : "grpc"
+            "Protocol": "grpc"
         },
         {
             "Listen": ":28082",
             "Dsn": "postgresql://dtx_user:dtx_pass@127.0.0.1:5432/dtx?connect_timeout=3",
             "MaxConnections": 3,
             "MaxIdleConnections": 3,
-            "Protocol" : "grpc"
+            "Protocol": "grpc"
         },
         {
             "Listen": ":28083",
             "Dsn": "postgresql://dtx_user:dtx_pass@127.0.0.1:5432/dtx?connect_timeout=3",
             "MaxConnections": 3,
             "MaxIdleConnections": 3,
-            "Protocol" : "grpc"
+            "Protocol": "grpc"
         }
     ]
 }

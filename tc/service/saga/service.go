@@ -13,6 +13,7 @@ import (
 	shttp "github.com/ikenchina/octopus/common/http"
 	"github.com/ikenchina/octopus/common/idgenerator"
 	logutil "github.com/ikenchina/octopus/common/log"
+	"github.com/ikenchina/octopus/common/metrics"
 	"github.com/ikenchina/octopus/common/util"
 	"github.com/ikenchina/octopus/define"
 	tc_rpc "github.com/ikenchina/octopus/define/proto/saga/pb"
@@ -20,6 +21,10 @@ import (
 	"github.com/ikenchina/octopus/tc/app/model"
 	"github.com/ikenchina/octopus/tc/config"
 	"google.golang.org/protobuf/proto"
+)
+
+var (
+	requestTimer = metrics.NewTimer("dtx", "tc_saga", "request", "request timer", []string{"protocol", "op", "code"})
 )
 
 type SagaService struct {

@@ -14,7 +14,9 @@ import (
 	"github.com/ikenchina/octopus/tc/app/model"
 )
 
-func (ss *SagaService) NewGtid(ctx context.Context, in *empty.Empty) (*tc_rpc.SagaResponse, error) {
+func (ss *SagaService) NewGtid(ctx context.Context, in *empty.Empty) (resp *tc_rpc.SagaResponse, err error) {
+	defer requestTimer.Timer()("grpc", "NewGtid", status.Code(err).String())
+
 	id, err := ss.idGenerator.NextId()
 	if err != nil {
 		return nil, err
@@ -27,7 +29,9 @@ func (ss *SagaService) NewGtid(ctx context.Context, in *empty.Empty) (*tc_rpc.Sa
 	}, nil
 }
 
-func (ss *SagaService) Commit(ctx context.Context, in *tc_rpc.SagaRequest) (*tc_rpc.SagaResponse, error) {
+func (ss *SagaService) Commit(ctx context.Context, in *tc_rpc.SagaRequest) (resp *tc_rpc.SagaResponse, err error) {
+	defer requestTimer.Timer()("grpc", "Commit", status.Code(err).String())
+
 	if ss.closed() {
 		return nil, status.Error(codes.Unavailable, "closed")
 	}
@@ -56,14 +60,16 @@ func (ss *SagaService) Commit(ctx context.Context, in *tc_rpc.SagaRequest) (*tc_
 		return nil, status.Error(ss.toGrpcStatusCode(err), err.Error())
 	}
 
-	resp := &tc_rpc.SagaResponse{
+	resp = &tc_rpc.SagaResponse{
 		Saga: &tc_rpc.Saga{},
 	}
 	ss.parsePbFromModel(resp.Saga, future.Txn)
 	return resp, nil
 }
 
-func (ss *SagaService) Get(ctx context.Context, in *tc_rpc.SagaRequest) (*tc_rpc.SagaResponse, error) {
+func (ss *SagaService) Get(ctx context.Context, in *tc_rpc.SagaRequest) (resp *tc_rpc.SagaResponse, err error) {
+	defer requestTimer.Timer()("grpc", "Get", status.Code(err).String())
+
 	if ss.closed() {
 		return nil, status.Error(codes.Unavailable, "closed")
 	}
@@ -77,7 +83,7 @@ func (ss *SagaService) Get(ctx context.Context, in *tc_rpc.SagaRequest) (*tc_rpc
 		return nil, status.Error(ss.toGrpcStatusCode(err), err.Error())
 	}
 
-	resp := &tc_rpc.SagaResponse{
+	resp = &tc_rpc.SagaResponse{
 		Saga: &tc_rpc.Saga{},
 	}
 	ss.parsePbFromModel(resp.Saga, saga)

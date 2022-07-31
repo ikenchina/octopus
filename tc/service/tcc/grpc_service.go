@@ -14,7 +14,9 @@ import (
 	"github.com/ikenchina/octopus/tc/app/model"
 )
 
-func (ss *TccService) NewGtid(ctx context.Context, in *empty.Empty) (*tcc_pb.TccResponse, error) {
+func (ss *TccService) NewGtid(ctx context.Context, in *empty.Empty) (resp *tcc_pb.TccResponse, err error) {
+	defer requestTimer.Timer()("grpc", "NewGtid", status.Code(err).String())
+
 	id, err := ss.idGenerator.NextId()
 	if err != nil {
 		return nil, err
@@ -27,7 +29,9 @@ func (ss *TccService) NewGtid(ctx context.Context, in *empty.Empty) (*tcc_pb.Tcc
 	}, nil
 }
 
-func (ss *TccService) Get(ctx context.Context, in *tcc_pb.TccRequest) (*tcc_pb.TccResponse, error) {
+func (ss *TccService) Get(ctx context.Context, in *tcc_pb.TccRequest) (resp *tcc_pb.TccResponse, err error) {
+	defer requestTimer.Timer()("grpc", "Get", status.Code(err).String())
+
 	if ss.closed() {
 		return nil, status.Error(codes.Unavailable, "closed")
 	}
@@ -40,12 +44,14 @@ func (ss *TccService) Get(ctx context.Context, in *tcc_pb.TccRequest) (*tcc_pb.T
 		return nil, status.Error(ss.toGrpcStatusCode(err), err.Error())
 	}
 
-	resp := &tcc_pb.TccResponse{}
+	resp = &tcc_pb.TccResponse{}
 	ss.parsePbFromModel(resp, txn)
 	return resp, nil
 }
 
-func (ss *TccService) Prepare(ctx context.Context, in *tcc_pb.TccRequest) (*tcc_pb.TccResponse, error) {
+func (ss *TccService) Prepare(ctx context.Context, in *tcc_pb.TccRequest) (resp *tcc_pb.TccResponse, err error) {
+	defer requestTimer.Timer()("grpc", "Prepare", status.Code(err).String())
+
 	if ss.closed() {
 		return nil, status.Error(codes.Unavailable, "closed")
 	}
@@ -62,12 +68,14 @@ func (ss *TccService) Prepare(ctx context.Context, in *tcc_pb.TccRequest) (*tcc_
 		return nil, status.Error(ss.toGrpcStatusCode(err), err.Error())
 	}
 
-	resp := &pb.TccResponse{}
+	resp = &pb.TccResponse{}
 	ss.parsePbFromModel(resp, future.Txn)
 	return resp, nil
 }
 
-func (ss *TccService) Register(ctx context.Context, in *tcc_pb.TccRequest) (*tcc_pb.TccResponse, error) {
+func (ss *TccService) Register(ctx context.Context, in *tcc_pb.TccRequest) (resp *tcc_pb.TccResponse, err error) {
+	defer requestTimer.Timer()("grpc", "Register", status.Code(err).String())
+
 	if ss.closed() {
 		return nil, status.Error(codes.Unavailable, "closed")
 	}
@@ -85,12 +93,14 @@ func (ss *TccService) Register(ctx context.Context, in *tcc_pb.TccRequest) (*tcc
 		return nil, status.Error(ss.toGrpcStatusCode(err), err.Error())
 	}
 
-	resp := &pb.TccResponse{}
+	resp = &pb.TccResponse{}
 	ss.parsePbFromModel(resp, future.Txn)
 	return resp, nil
 }
 
-func (ss *TccService) Confirm(ctx context.Context, in *tcc_pb.TccRequest) (*tcc_pb.TccResponse, error) {
+func (ss *TccService) Confirm(ctx context.Context, in *tcc_pb.TccRequest) (resp *tcc_pb.TccResponse, err error) {
+	defer requestTimer.Timer()("grpc", "Confirm", status.Code(err).String())
+
 	if ss.closed() {
 		return nil, status.Error(codes.Unavailable, "closed")
 	}
@@ -101,17 +111,19 @@ func (ss *TccService) Confirm(ctx context.Context, in *tcc_pb.TccRequest) (*tcc_
 	future := ss.executor.Commit(ctx, &model.Txn{
 		Gtid: gtid,
 	})
-	err := future.GetError()
+	err = future.GetError()
 	if err != nil {
 		return nil, status.Error(ss.toGrpcStatusCode(err), err.Error())
 	}
 
-	resp := &pb.TccResponse{}
+	resp = &pb.TccResponse{}
 	ss.parsePbFromModel(resp, future.Txn)
 	return resp, nil
 }
 
-func (ss *TccService) Cancel(ctx context.Context, in *tcc_pb.TccRequest) (*tcc_pb.TccResponse, error) {
+func (ss *TccService) Cancel(ctx context.Context, in *tcc_pb.TccRequest) (resp *tcc_pb.TccResponse, err error) {
+	defer requestTimer.Timer()("grpc", "Cancel", status.Code(err).String())
+
 	if ss.closed() {
 		return nil, status.Error(codes.Unavailable, "closed")
 	}
@@ -123,12 +135,12 @@ func (ss *TccService) Cancel(ctx context.Context, in *tcc_pb.TccRequest) (*tcc_p
 		Gtid: gtid,
 	})
 
-	err := future.GetError()
+	err = future.GetError()
 	if err != nil {
 		return nil, status.Error(ss.toGrpcStatusCode(err), err.Error())
 	}
 
-	resp := &pb.TccResponse{}
+	resp = &pb.TccResponse{}
 	ss.parsePbFromModel(resp, future.Txn)
 	return resp, nil
 }

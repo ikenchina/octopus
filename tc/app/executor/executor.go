@@ -11,6 +11,7 @@ import (
 	"github.com/ikenchina/octopus/common/errorutil"
 	logutil "github.com/ikenchina/octopus/common/log"
 	"github.com/ikenchina/octopus/common/metrics"
+	"github.com/ikenchina/octopus/common/operator"
 	"github.com/ikenchina/octopus/common/slice"
 	"github.com/ikenchina/octopus/tc/app/model"
 )
@@ -29,10 +30,10 @@ var (
 )
 
 var (
-	txnTimer       = metrics.NewTimer("dtx", "tc", "txn", "txn timer", []string{"type", "op"})
-	branchTimer    = metrics.NewTimer("dtx", "tc", "branch", "branch timer", []string{"type", "branch"})
-	stateGauge     = metrics.NewGaugeVec("dtx", "tc", "txn_state", "state", []string{"type", "state"})
-	processCounter = metrics.NewCounterVec("dtx", "tc", "process", "process count", []string{"type"})
+	txnTimer     = metrics.NewTimer("dtx", "tc", "txn", "txn timer", []string{"type", "ret"})
+	branchTimer  = metrics.NewTimer("dtx", "tc", "branch", "branch timer", []string{"type", "branch"})
+	stateGauge   = metrics.NewGaugeVec("dtx", "tc", "txn_state", "state", []string{"type", "state"})
+	processTimer = metrics.NewTimer("dtx", "tc", "process", "process", []string{"type", "op"})
 )
 
 type Config struct {
@@ -126,9 +127,11 @@ func (s *actionTask) finish(err error) {
 	default:
 	}
 
+	now := time.Now()
 	if s.finishCB != nil {
-		s.finishCB(s.startTime, time.Now(), err)
+		s.finishCB(s.startTime, now, err)
 	}
+	txnTimer.Observe(now.Sub(s.startTime), s.TxnType, operator.IfElse(err == nil, "ok", "err").(string))
 }
 
 func newTask(ctx context.Context, txn *model.Txn, finishCB func(start, end time.Time, err error)) *actionTask {
@@ -271,12 +274,26 @@ func (ex *baseExecutor) taskCount() int {
 	return len(ex.tasks)
 }
 
+func modelError(err error) error {
+	if err == nil {
+		return nil
+	}
+	switch err {
+	case model.ErrNotExist:
+		return ErrNotExists
+	case model.ErrInvalidLessee, model.ErrIsNotPrepared, model.ErrAlreadyExist:
+		return ErrInvalidState
+	}
+	return ErrUnknown
+}
+
 func (ex *baseExecutor) getTask(ctx context.Context, id string) (*model.Txn, error) {
 	ex.mutex.RLock()
 	st, ok := ex.tasks[id]
 	if !ok {
 		ex.mutex.RUnlock()
-		return ex.cfg.Store.GetByGtid(ctx, id)
+		txn, err := ex.cfg.Store.GetByGtid(ctx, id)
+		return txn, modelError(err)
 	}
 	ex.mutex.RUnlock()
 	return st.Txn, nil
@@ -360,7 +377,7 @@ func (ex *baseExecutor) schedule(task *actionTask, after time.Duration) {
 	}
 	logutil.Logger(task.Ctx).Sugar().Debugf("schedule : %s, %s, %v", task.Gtid, task.State, after)
 
-	processCounter.Inc("schedule")
+	mt := processTimer.Timer()
 
 	task.incrScheduleCount()
 	if task.getScheduleCount() > 10 {
@@ -376,6 +393,7 @@ func (ex *baseExecutor) schedule(task *actionTask, after time.Duration) {
 		if err != nil {
 			ex.finishTask(task, err)
 		}
+		mt(task.TxnType, "schedule")
 	})
 }
 

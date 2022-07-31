@@ -201,7 +201,7 @@ func (te *TccExecutor) endTxn(ctx context.Context, txn *model.Txn, state string)
 }
 
 func (te *TccExecutor) process(tcc *actionTask) {
-	defer txnTimer.Timer()(te.txnType, "process")
+	defer processTimer.Timer()(te.txnType, "process")
 
 	te.wait.Add(1)
 	defer te.wait.Done()
@@ -268,7 +268,7 @@ func (te *TccExecutor) setTxnLease(task *actionTask, branchType string) {
 }
 
 func (te *TccExecutor) processAction(tcc *actionTask, branchType string, state string) {
-	defer txnTimer.Timer()(te.txnType, "process_"+branchType)
+	defer processTimer.Timer()(te.txnType, "process_"+branchType)
 
 	for _, branch := range tcc.Branches {
 		if branch.BranchType == branchType && branch.State == define.TxnStatePrepared {

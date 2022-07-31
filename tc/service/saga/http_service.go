@@ -40,20 +40,22 @@ func (ss *SagaService) OpTxn(c *gin.Context) {
 }
 
 func (ss *SagaService) HttpCommit(c *gin.Context) {
+	code := http.StatusOK
+	defer requestTimer.Timer()("http", "Commit", http.StatusText(code))
+
 	if ss.closed() {
-		c.JSON(http.StatusServiceUnavailable, "")
+		code = http.StatusServiceUnavailable
+		c.JSON(code, "")
 		return
 	}
-	ss.commit(c)
-}
 
-func (ss *SagaService) commit(c *gin.Context) {
 	ss.wait.Add(1)
 	defer ss.wait.Done()
 
 	saga, err := ss.parseSaga(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, &define.SagaResponse{
+		code = http.StatusBadRequest
+		c.JSON(code, &define.SagaResponse{
 			Msg: fmt.Sprintf("ERROR : %v", err),
 		})
 		return
@@ -83,18 +85,20 @@ func (ss *SagaService) commit(c *gin.Context) {
 		resp.Msg = fmt.Sprintf("ERROR : %v", err)
 	}
 
-	c.JSON(ss.toHttpStatusCode(err), resp)
+	code = ss.toHttpStatusCode(err)
+	c.JSON(code, resp)
 }
 
 func (ss *SagaService) HttpGet(c *gin.Context) {
+	code := http.StatusOK
+	defer requestTimer.Timer()("http", "Get", http.StatusText(code))
+
 	if ss.closed() {
-		c.JSON(http.StatusServiceUnavailable, "")
+		code = http.StatusServiceUnavailable
+		c.JSON(code, "")
 		return
 	}
-	ss.get(c)
-}
 
-func (ss *SagaService) get(c *gin.Context) {
 	ss.wait.Add(1)
 	defer ss.wait.Done()
 
@@ -105,11 +109,14 @@ func (ss *SagaService) get(c *gin.Context) {
 	}
 	if err != nil {
 		resp.Msg = fmt.Sprintf("ERROR : %v", err)
-		c.JSON(http.StatusOK, resp)
+		code = ss.toHttpStatusCode(err)
+		c.JSON(code, resp)
 		return
 	}
+
 	ss.parseFromModel(resp, saga)
-	c.JSON(ss.toHttpStatusCode(err), resp)
+	code = ss.toHttpStatusCode(err)
+	c.JSON(code, resp)
 }
 
 func (ss *SagaService) toHttpStatusCode(err error) int {

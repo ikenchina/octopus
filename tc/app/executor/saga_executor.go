@@ -224,7 +224,7 @@ func (se *SagaExecutor) shouldRollback(task *actionTask) bool {
 }
 
 func (se *SagaExecutor) processRollback(task *actionTask) {
-	defer txnTimer.Timer()(se.txnType, "rollback")
+	defer processTimer.Timer()(se.txnType, "rollback")
 
 	logutil.Logger(task.Ctx).Sugar().Debugf("processRollback : %s, %s", task.Gtid, task.State)
 
@@ -313,7 +313,7 @@ func (se *SagaExecutor) grantLease(task *actionTask, branch *model.Branch, state
 }
 
 func (se *SagaExecutor) processCommitting(task *actionTask) {
-	defer txnTimer.Timer()(se.txnType, "committing")
+	defer processTimer.Timer()(se.txnType, "committing")
 
 	// prepared
 	for _, branch := range task.Branches {

@@ -29,7 +29,8 @@
 ./tc --config ./config.json
 ```
 
-或者使用systemd管理，见github.com/ikenchina/octopus/tc/deployment/README.md
+或者    
+使用systemd管理，见github.com/ikenchina/octopus/tc/deployment/README.md
 
 
 
@@ -116,7 +117,7 @@ curl -XGET http://localhost:18089/debug/healthcheck
 
 如果配置中配置了"HttpListen"，则可以通过`/debug/metrics`来导出prometheus的数据。
 
-
+如果使用grafana，可以直接导入 `octopus/tc/deployment/grafana-tc.json`。
 
 
 ## 部署RM

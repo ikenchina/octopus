@@ -13,12 +13,17 @@ import (
 	shttp "github.com/ikenchina/octopus/common/http"
 	"github.com/ikenchina/octopus/common/idgenerator"
 	logutil "github.com/ikenchina/octopus/common/log"
+	"github.com/ikenchina/octopus/common/metrics"
 	"github.com/ikenchina/octopus/common/util"
 	"github.com/ikenchina/octopus/define"
 	tcc_pb "github.com/ikenchina/octopus/define/proto/tcc/pb"
 	"github.com/ikenchina/octopus/tc/app/executor"
 	"github.com/ikenchina/octopus/tc/app/model"
 	"github.com/ikenchina/octopus/tc/config"
+)
+
+var (
+	requestTimer = metrics.NewTimer("dtx", "tc_tcc", "request", "request timer", []string{"protocol", "op", "code"})
 )
 
 type TccService struct {

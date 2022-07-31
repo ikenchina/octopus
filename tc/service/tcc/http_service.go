@@ -38,20 +38,22 @@ func (ss *TccService) parse(c *gin.Context) (*model.Txn, error) {
 }
 
 func (ss *TccService) HttpPrepare(c *gin.Context) {
+	code := http.StatusOK
+	defer requestTimer.Timer()("http", "Prepare", http.StatusText(code))
+
 	if ss.closed() {
-		c.JSON(http.StatusServiceUnavailable, "")
+		code = http.StatusServiceUnavailable
+		c.JSON(code, "")
 		return
 	}
-	ss.prepare(c)
-}
 
-func (ss *TccService) prepare(c *gin.Context) {
 	ss.wait.Add(1)
 	defer ss.wait.Done()
 
 	task, err := ss.parse(c)
 	if err != nil || task.ExpireTime.Before(time.Now()) {
-		c.JSON(http.StatusBadRequest, &define.TccResponse{
+		code = http.StatusBadRequest
+		c.JSON(code, &define.TccResponse{
 			Msg: fmt.Sprintf("ERROR : %v", err),
 		})
 		return
@@ -69,28 +71,32 @@ func (ss *TccService) prepare(c *gin.Context) {
 	if err != nil {
 		resp.Msg = fmt.Sprintf("ERROR : %v", err)
 	}
-	c.JSON(ss.toStatusCode(err), resp)
-}
 
-func (ss *TccService) HttpRegister(c *gin.Context) {
-	if ss.closed() {
-		c.JSON(http.StatusServiceUnavailable, "")
-		return
-	}
-	ss.register(c)
+	code = ss.toStatusCode(err)
+	c.JSON(code, resp)
 }
 
 func (ss *TccService) OpTxn(c *gin.Context) {
 	// @todo
 }
 
-func (ss *TccService) register(c *gin.Context) {
+func (ss *TccService) HttpRegister(c *gin.Context) {
+	code := http.StatusOK
+	defer requestTimer.Timer()("http", "Register", http.StatusText(code))
+
+	if ss.closed() {
+		code = http.StatusServiceUnavailable
+		c.JSON(code, "")
+		return
+	}
+
 	ss.wait.Add(1)
 	defer ss.wait.Done()
 
 	task, err := ss.parse(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, &define.TccResponse{
+		code = http.StatusBadRequest
+		c.JSON(code, &define.TccResponse{
 			Msg: fmt.Sprintf("ERROR : %v", err),
 		})
 		return
@@ -108,18 +114,21 @@ func (ss *TccService) register(c *gin.Context) {
 	if err != nil {
 		resp.Msg = fmt.Sprintf("ERROR : %v", err)
 	}
-	c.JSON(ss.toStatusCode(err), resp)
+
+	code = ss.toStatusCode(err)
+	c.JSON(code, resp)
 }
 
 func (ss *TccService) HttpConfirm(c *gin.Context) {
+	code := http.StatusOK
+	defer requestTimer.Timer()("http", "Confirm", http.StatusText(code))
+
 	if ss.closed() {
-		c.JSON(http.StatusServiceUnavailable, "")
+		code = http.StatusServiceUnavailable
+		c.JSON(code, "")
 		return
 	}
-	ss.confirm(c)
-}
 
-func (ss *TccService) confirm(c *gin.Context) {
 	ss.wait.Add(1)
 	defer ss.wait.Done()
 
@@ -135,18 +144,20 @@ func (ss *TccService) confirm(c *gin.Context) {
 		resp.Msg = fmt.Sprintf("ERROR : %v", err)
 	}
 
-	c.JSON(ss.toStatusCode(err), resp)
+	code = ss.toStatusCode(err)
+	c.JSON(code, resp)
 }
 
 func (ss *TccService) HttpCancel(c *gin.Context) {
+	code := http.StatusOK
+	defer requestTimer.Timer()("http", "Cancel", http.StatusText(code))
+
 	if ss.closed() {
-		c.JSON(http.StatusServiceUnavailable, "")
+		code = http.StatusServiceUnavailable
+		c.JSON(code, "")
 		return
 	}
-	ss.cancel(c)
-}
 
-func (ss *TccService) cancel(c *gin.Context) {
 	ss.wait.Add(1)
 	defer ss.wait.Done()
 
@@ -162,18 +173,21 @@ func (ss *TccService) cancel(c *gin.Context) {
 	if err != nil {
 		resp.Msg = fmt.Sprintf("ERROR : %v", err)
 	}
-	c.JSON(ss.toStatusCode(err), resp)
+
+	code = ss.toStatusCode(err)
+	c.JSON(code, resp)
 }
 
 func (ss *TccService) HttpGet(c *gin.Context) {
+	code := http.StatusOK
+	defer requestTimer.Timer()("http", "Get", http.StatusText(code))
+
 	if ss.closed() {
-		c.JSON(http.StatusServiceUnavailable, "")
+		code = http.StatusServiceUnavailable
+		c.JSON(code, "")
 		return
 	}
-	ss.get(c)
-}
 
-func (ss *TccService) get(c *gin.Context) {
 	ss.wait.Add(1)
 	defer ss.wait.Done()
 
@@ -188,7 +202,9 @@ func (ss *TccService) get(c *gin.Context) {
 	} else {
 		resp.Msg = fmt.Sprintf("ERROR : %v", err)
 	}
-	c.JSON(ss.toStatusCode(err), resp)
+
+	code = ss.toStatusCode(err)
+	c.JSON(code, resp)
 }
 
 func (ss *TccService) toStatusCode(err error) int {
