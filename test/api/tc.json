@@ -3,7 +3,7 @@
         "NodeId": 2,
         "DataCenterId": 1
     },
-    "HttpListen": ":8080",
+    "HttpListen": ":18080",
     "MaxConcurrentTask": 1,
     "MaxConcurrentBranch": 1,
     "Storages": {

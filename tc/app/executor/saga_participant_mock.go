@@ -106,25 +106,25 @@ type rmBodyMock struct {
 	State string
 }
 
-func (rmm *rmMock) newRequestBody(gtid string) string {
+func (rmm *rmMock) newRequestBody(gtid string) []byte {
 	pb := rmBodyMock{
 		Gtid: gtid,
 	}
 	b, _ := json.Marshal(&pb)
-	return string(b)
+	return (b)
 }
 
-func (rmm *rmMock) Execute(ctx context.Context, gtid string, url string, bodyStr string, state string, body *rmBodyMock) (string, error) {
+func (rmm *rmMock) Execute(ctx context.Context, gtid string, url string, bodyStr []byte, state string, body *rmBodyMock) ([]byte, error) {
 
 	h, ok := rmm.handlers[url]
 	if !ok {
-		return "", errors.New("not found")
+		return nil, errors.New("not found")
 	}
 
 	if body != nil {
-		err := json.Unmarshal([]byte(bodyStr), body)
+		err := json.Unmarshal((bodyStr), body)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 	}
 
@@ -144,6 +144,6 @@ func (rmm *rmMock) Execute(ctx context.Context, gtid string, url string, bodyStr
 		h.stores[gtid] = body
 		return bodyStr, nil
 	case <-ctx.Done():
-		return "", errors.New("timeout")
+		return nil, errors.New("timeout")
 	}
 }

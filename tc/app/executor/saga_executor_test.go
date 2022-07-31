@@ -70,7 +70,7 @@ func (s *_sagaSuite) TestTimeoutRetryOk() {
 	time.Sleep(time.Millisecond * 15)
 
 	// check storage model
-	s.Equal(define.TxnStatePrepared, sagaPm.State)
+	s.Equal(define.TxnStateCommitting, sagaPm.State)
 	s.Equal(1, service0Commit.TryCount)
 	s.Equal(1, service1Commit.TryCount)
 	s.Equal(0, service2Commit.TryCount)
@@ -79,7 +79,7 @@ func (s *_sagaSuite) TestTimeoutRetryOk() {
 	time.Sleep(time.Millisecond * (10 + 10)) // timeout, rescheduling
 
 	// ############   second time   ############
-	s.Equal(define.TxnStateFailed, service1Commit.State)
+	s.Equal(define.TxnStatePrepared, service1Commit.State)
 
 	// response checking
 	s.Nil(sagaFuture.GetError())
@@ -140,7 +140,7 @@ func (s *_sagaSuite) TestCompensationOk() {
 	// check storage model
 	get, err := storage.GetByGtid(ctx, sagaFuture.Gtid)
 	s.Nil(err)
-	s.Equal(define.TxnStatePrepared, get.State)
+	s.Equal(define.TxnStateCommitting, get.State)
 	s.Equal(1, service0Commit.TryCount)
 	s.Equal(1, service1Commit.TryCount)
 	s.Equal(0, service2Commit.TryCount)
@@ -151,7 +151,7 @@ func (s *_sagaSuite) TestCompensationOk() {
 
 	_, err = storage.GetByGtid(ctx, sagaFuture.Gtid)
 	s.Nil(err)
-	s.Equal(define.TxnStateFailed, service1Commit.State)
+	s.Equal(define.TxnStatePrepared, service1Commit.State)
 
 	// response checking
 	s.Nil(sagaFuture.GetError())
@@ -213,6 +213,7 @@ func (s *_sagaSuite) TestCommitError() {
 
 func (s *_sagaSuite) TestCron() {
 	storage, sagaExec, _, _ := s.startSagaExecutor(nil)
+	storage.SetTimeout(10 * time.Millisecond)
 	ctx := context.Background()
 	sagaPm := s.newSage()
 
@@ -233,8 +234,8 @@ func (s *_sagaSuite) TestCron() {
 
 	sg1, _ := sagaExec.Get(ctx, sagaFuture.Gtid)
 	sg2, _ := sagaExec.Get(ctx, sagaFuture2.Gtid)
-	s.Equal(define.TxnStatePrepared, sg1.State)
-	s.Equal(define.TxnStatePrepared, sg2.State)
+	s.Equal(define.TxnStateCommitting, sg1.State)
+	s.Equal(define.TxnStateCommitting, sg2.State)
 
 	service1Handler.setTimeout(10 * time.Millisecond)
 

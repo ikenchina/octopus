@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package saga;
+option go_package = "./pb";
+import "google/protobuf/empty.proto";
+import "common.proto";
+
+service Ap {
+    rpc Notify(ApNotifyRequest) returns (google.protobuf.Empty) {}
+}
+
+message ApNotifyRequest {
+    Saga saga = 1;
+}

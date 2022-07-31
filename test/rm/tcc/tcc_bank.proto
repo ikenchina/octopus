@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package bankservice;
+
+option go_package = "./pb";
+
+
+service TccBankService {
+    rpc Try(TccRequest) returns (TccResponse) {}
+    rpc Confirm(TccRequest) returns (TccResponse) {}
+    rpc Cancel(TccRequest) returns (TccResponse) {}
+}
+
+message TccRequest {
+    int32 user_id = 1;
+    int32 account = 2;
+}
+
+message TccResponse {
+}

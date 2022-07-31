@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 )
 
-func PostJson(ctx context.Context, gtid string, url string, payload string, resp interface{}) (int, error) {
+func PostJson(ctx context.Context, gtid string, url string, payload []byte, resp interface{}) (int, error) {
 	body, code, err := Post(ctx, gtid, url, payload)
 	if err != nil {
 		return code, err

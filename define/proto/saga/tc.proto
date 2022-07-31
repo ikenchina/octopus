@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "common.proto";
+
+package saga;
+option go_package = "./pb";
+
+
+service Tc {
+    rpc NewGtid(google.protobuf.Empty) returns (SagaResponse) {}
+    rpc Commit(SagaRequest) returns (SagaResponse) {}
+    rpc Get(SagaRequest) returns (SagaResponse) {}
+}
+
+message SagaRequest {
+    enum CallType {
+        SYNC = 0;
+        ASYNC = 1;
+    }
+
+    string gtid = 1;
+    string business = 2;
+    SagaNotify notify = 3;
+    google.protobuf.Timestamp expire_time = 4;
+    CallType call_type = 5;
+    repeated SagaBranchRequest branches = 6;
+}
+
+message SagaBranchRequest {
+    message RetryStrategy {
+        oneof strategy {
+            google.protobuf.Duration constant = 1;
+        }
+    }
+    message Retry {
+        int32 max_retry = 1;
+        RetryStrategy strategy = 2;
+    }
+    message Commit {
+        string action = 1;
+        google.protobuf.Duration timeout = 2;
+        Retry retry = 3;
+    }
+    message Compensation {
+        string action = 1;
+        google.protobuf.Duration timeout = 2;
+        google.protobuf.Duration retry = 3;
+    }
+    int32 branch_id = 1;
+    Commit commit = 2;
+    Compensation compensation = 3;
+    bytes payload =4;
+}
+
+message SagaNotify {
+    string action = 1;
+    google.protobuf.Duration timeout = 2;
+    google.protobuf.Duration retry = 3;
+}
+
+message SagaResponse {
+    Saga saga = 1;
+}
+

@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package bankservice;
+
+option go_package = "./pb";
+
+
+service SagaBankService {
+    rpc In(SagaRequest) returns (SagaResponse) {}
+    rpc Out(SagaRequest) returns (SagaResponse) {}
+}
+
+message SagaRequest {
+    int32 user_id = 1;
+    int32 account = 2;
+}
+
+message SagaResponse {
+}

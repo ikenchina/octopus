@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package saga;
+option go_package = "./pb";
+
+message Saga {
+    string gtid = 1;
+    string state = 2;
+    repeated SagaBranch branches = 3;
+    string msg = 4;
+}
+
+message SagaBranch {
+    int32 branch_id = 1;
+    string state = 2;
+    bytes payload = 3;
+}

@@ -10,7 +10,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	tcc_cli "github.com/ikenchina/octopus/client/tcc"
+	tcc_cli "github.com/ikenchina/octopus/ap/tcc"
 	"github.com/ikenchina/octopus/common/errorutil"
 	shttp "github.com/ikenchina/octopus/common/http"
 	"github.com/ikenchina/octopus/define"

@@ -16,24 +16,23 @@ import (
 )
 
 var (
-	ErrUnknown           = errors.New("unknown")
-	ErrTimeout           = errors.New("timeout")
-	ErrTaskIsAborted     = errors.New("is aborted")
-	ErrTaskAlreadyExist  = errors.New("task already exist")
-	ErrNotExists         = errors.New("not exists")
-	ErrInProgress        = errors.New("in progress")
-	ErrStateIsNotPrepare = errors.New("transaction is not prepare")
-	ErrStateIsAborted    = errors.New("transaction is aborted")
-	ErrStateIsCommitted  = errors.New("transaction is committed")
-	ErrExceedMaxTryCount = errors.New("exceed max try count")
-	ErrExecutorClosed    = errors.New("closed")
-	ErrInvalidState      = errors.New("invalid state")
+	ErrUnknown          = errors.New("unknown")
+	ErrCancel           = errors.New("canceled")
+	ErrTimeout          = errors.New("timeout")
+	ErrTaskAlreadyExist = errors.New("task already exist")
+	ErrNotExists        = errors.New("not exists")
+	ErrInProgress       = errors.New("in progress")
+	ErrStateIsAborted   = errors.New("transaction is aborted")
+	ErrStateIsCommitted = errors.New("transaction is committed")
+	ErrExecutorClosed   = errors.New("closed")
+	ErrInvalidState     = errors.New("invalid state")
 )
 
 var (
-	txnTimer    = metrics.NewTimer("dtx", "txn", "txn timer", []string{"type", "op"})
-	branchTimer = metrics.NewTimer("dtx", "branch", "branch timer", []string{"type", "branch"})
-	stateGauge  = metrics.NewGaugeVec("dtx", "txn", "state", []string{"type", "state"})
+	txnTimer       = metrics.NewTimer("dtx", "txn", "txn timer", []string{"type", "op"})
+	branchTimer    = metrics.NewTimer("dtx", "branch", "branch timer", []string{"type", "branch"})
+	stateGauge     = metrics.NewGaugeVec("dtx", "txn", "state", []string{"type", "state"})
+	processCounter = metrics.NewCounterVec("dtx", "process", "process count", []string{"type"})
 )
 
 type Config struct {
@@ -47,10 +46,11 @@ type Config struct {
 	CheckLeaseExpiredDuration time.Duration
 }
 
-func NewActionNotify(ctx context.Context, txn *model.Txn, bt string, action, payload string) *ActionNotify {
+func NewActionNotify(ctx context.Context, txn *model.Txn, bt string, BranchID int, action string, payload []byte) *ActionNotify {
 	return &ActionNotify{
 		txn:        txn,
 		BranchType: bt,
+		BranchID:   BranchID,
 		Action:     action,
 		Payload:    payload,
 		Ctx:        ctx,
@@ -61,11 +61,12 @@ func NewActionNotify(ctx context.Context, txn *model.Txn, bt string, action, pay
 type ActionNotify struct {
 	txn        *model.Txn
 	BranchType string
+	BranchID   int
 	Action     string
-	Payload    string
+	Payload    []byte
 	Ctx        context.Context
 	DoneChan   chan error
-	Msg        string
+	Msg        []byte
 }
 
 func (sn *ActionNotify) GID() string {
@@ -76,7 +77,7 @@ func (sn *ActionNotify) Txn() *model.Txn {
 	return sn.txn
 }
 
-func (sn *ActionNotify) Done(err error, msg string) {
+func (sn *ActionNotify) Done(err error, msg []byte) {
 	sn.Msg = msg
 	sn.DoneChan <- err
 }
@@ -92,14 +93,31 @@ func (sf *ActionFuture) GetError() error {
 
 type actionTask struct {
 	*model.Txn
-	Ctx       context.Context
-	errChan   chan error
-	startTime time.Time
-	finishCB  func(start, end time.Time, err error)
+	Ctx          context.Context
+	errChan      chan error
+	startTime    time.Time
+	finishCB     func(start, end time.Time, err error)
+	sheduleCount int32
+}
+
+func (s *actionTask) incrScheduleCount() {
+	atomic.AddInt32(&s.sheduleCount, 1)
+}
+
+func (s *actionTask) getScheduleCount() int32 {
+	return atomic.LoadInt32(&s.sheduleCount)
 }
 
 func (s *actionTask) future() *ActionFuture {
 	return (*ActionFuture)(s)
+}
+
+func (s *actionTask) notify(err error) {
+	select {
+	case s.errChan <- err:
+		s.Ctx = context.Background()
+	default:
+	}
 }
 
 func (s *actionTask) finish(err error) {
@@ -208,7 +226,7 @@ func (ex *baseExecutor) startCleanup(txn string) {
 	}
 
 	maxDuration := ex.cfg.CheckExpiredDuration
-	minDuration := time.Millisecond * 100
+	minDuration := time.Millisecond * 200
 	clean := func() time.Duration {
 		txns, err := ex.cfg.Store.CleanExpiredTxns(context.Background(),
 			txn, time.Now().Add(-1*ex.cfg.CleanExpired), ex.cfg.CleanLimit)
@@ -242,8 +260,6 @@ func (ex *baseExecutor) queueTask(task *actionTask) error {
 	select {
 	case <-ex.closeChan:
 		return ErrExecutorClosed
-	case <-task.Ctx.Done():
-		return ErrTimeout
 	case ex.taskChan <- task:
 	}
 	return nil
@@ -305,21 +321,20 @@ func (ex *baseExecutor) startTask(task *actionTask) error {
 }
 
 func (ex *baseExecutor) finishTaskFatalError(task *actionTask, err error) bool {
-	if err == ErrInvalidState || err == model.ErrInvalidLessee {
-		logutil.Logger(task.Ctx).Sugar().Errorf("fatal error : gtid(%s), error(%v)", task.Gtid, err)
+	// 状态被其他节点更改。
+	if errors.Is(err, ErrInvalidState) || errors.Is(err, model.ErrInvalidLessee) {
 		ex.finishTask(task, err)
 		return true
 	}
 	return false
 }
 
-func (ex *baseExecutor) saveState(task *actionTask, srcStates []string, state string) error {
+func (ex *baseExecutor) updateState(task *actionTask, srcStates []string, state string) error {
 	originState := task.State
 	task.SetState(state)
 	err := ex.cfg.Store.UpdateConditions(task.Ctx, task.Txn, func(oldTxn *model.Txn) error {
 		if !slice.Contain(srcStates, oldTxn.State) {
-			return fmt.Errorf("src(%v), old(%v)", srcStates, oldTxn.State)
-			//return ErrInvalidState
+			return fmt.Errorf("src(%v), old(%v), state(%s), %w", srcStates, oldTxn.State, state, ErrInvalidState)
 		}
 		return nil
 	})
@@ -332,6 +347,9 @@ func (ex *baseExecutor) saveState(task *actionTask, srcStates []string, state st
 		ex.schedule(task, ex.cfg.Store.Timeout())
 	}
 
+	logutil.Logger(task.Ctx).Sugar().Errorf("save state : gtid(%s), src(%v), state(%v), error(%v)",
+		task.Gtid, srcStates, state, err)
+
 	return err
 }
 
@@ -340,12 +358,19 @@ func (ex *baseExecutor) schedule(task *actionTask, after time.Duration) {
 		ex.finishTask(task, ErrExecutorClosed)
 		return
 	}
+	logutil.Logger(task.Ctx).Sugar().Debugf("schedule : %s, %s, %v", task.Gtid, task.State, after)
+
+	processCounter.Inc("schedule")
+
+	task.incrScheduleCount()
+	if task.getScheduleCount() > 10 {
+		logutil.Logger(task.Ctx).Sugar().Infof("schedule count > 10: %s, %s, %v", task.Gtid, task.State, after)
+	}
 
 	time.AfterFunc(after, func() {
 		deadline, ok := task.Ctx.Deadline()
 		if ok && deadline.Before(time.Now().Add(after)) {
-			task.finish(ErrTimeout)
-			return
+			task.notify(ErrTimeout)
 		}
 		err := ex.queueTask(task)
 		if err != nil {

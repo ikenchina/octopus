@@ -314,6 +314,7 @@ func (s *_tccSuite) startExecutor(storage model.ModelStorage) (model.ModelStorag
 		CleanExpired:   time.Second,
 		CleanLimit:     10,
 	})
+
 	s.NotNil(exec)
 	s.Nil(err)
 	s.Nil(exec.Start())

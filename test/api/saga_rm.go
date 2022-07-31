@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	saga_client "github.com/ikenchina/octopus/client/saga"
+	saga_client "github.com/ikenchina/octopus/ap/saga"
 	"github.com/ikenchina/octopus/common/errorutil"
 	"github.com/ikenchina/octopus/define"
 )
@@ -17,7 +17,7 @@ type sagaRmMock struct {
 	notify     map[string]*define.SagaResponse
 	requests   map[string]*define.SagaRequest
 	notifyChan chan *define.SagaResponse
-	cli        saga_client.Client
+	cli        saga_client.HttpClient
 }
 
 func newSagaRm(server int, listen string) *sagaRmMock {

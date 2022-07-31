@@ -10,15 +10,20 @@ const (
 	BranchTypeCancel       = "cancel"
 
 	//
-	TxnStatePrepared   = "prepared"
-	TxnStateFailed     = "failed"
-	TxnStateAborted    = "aborted"
-	TxnStateCommitting = "committing"
-	TxnStateCommitted  = "committed"
+	TxnStatePrepared     = "prepared"
+	TxnStateCommitting   = "committing"
+	TxnStatePreCommitted = "precommitted" // notifying
+	TxnStateCommitted    = "committed"
+	TxnStateRolling      = "rolling"
+	TxnStatePreAborted   = "preaborted" // notifying
+	TxnStateAborted      = "aborted"
 
 	TxnCallTypeSync  = "sync"
 	TxnCallTypeAsync = "async"
 
 	RmProtocolGrpc     = "grpc"
 	RmProtocolSeparate = ";"
+
+	PayloadCodecJson  = "json"
+	PayloadCodecProto = "proto"
 )
