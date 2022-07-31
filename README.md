@@ -34,30 +34,30 @@ Octopus已经实现TC，AP和RM的相关封装，用户只需要实现业务逻�
 
 **事务发起方AP**
 ```
-  // 使用SagaTransaction启动一个分布式Saga 事务，然后添加子事务分支
-	resp, err := saga.SagaTransaction(ctx, app.tcClient, sagaExpiredTime, 
-    func(txn *saga.Transaction, gtid string) error {   
-      txn.AddGrpcBranch(1, server1, commitMethodName, compensateMethodName)
-      txn.AddGrpcBranch(2, server2, commitMethodName, compensateMethodName)
-			return nil
-		})
+// 使用SagaTransaction启动一个分布式Saga 事务，然后添加子事务分支
+resp, err := saga.SagaTransaction(ctx, app.tcClient, sagaExpiredTime, 
+  func(txn *saga.Transaction, gtid string) error {   
+    txn.AddGrpcBranch(1, server1, commitMethodName, compensateMethodName)
+    txn.AddGrpcBranch(2, server2, commitMethodName, compensateMethodName)
+    return nil
+})
 ```
 
 **事务参与方RM**
 
 Saga分布式事务的RM要实现commit和compensation接口，开发者也只需要实现相关业务逻辑。
 ```
-  // 提交逻辑，在HandleCommit的func(tx *sql.Tx)实现业务逻辑
-	err := saga.HandleCommit(ctx, rm.db, gtid, bid, func(tx *sql.Tx) error {
-    // 实现业务逻辑即可
-    ......
-	})
+// 提交逻辑，在HandleCommit的func(tx *sql.Tx)实现业务逻辑
+err := saga.HandleCommit(ctx, rm.db, gtid, bid, func(tx *sql.Tx) error {
+  // 实现业务逻辑即可
+  ......
+})
 
-  // 回滚逻辑(补偿)
-	err := saga.HandleCompensation(ctx, rm.db, gtid, bid, func(tx *sql.Tx) error {
-    // 实现业务逻辑即可
-    ......
-	})
+// 回滚逻辑(补偿)
+err := saga.HandleCompensation(ctx, rm.db, gtid, bid, func(tx *sql.Tx) error {
+  // 实现业务逻辑即可
+  ......
+})
 ```
 
 事务管理方TC由octopus实现，开发者只需要部署，无须开发任何代码。
@@ -86,10 +86,10 @@ Saga分布式事务的RM要实现commit和compensation接口，开发者也只�
 
 **单元测试**
 
-各单元测试均通过，若提交PR，请确保单元测试通过，且覆盖新代码。
+各单元测试均通过，若提交PR，请确保单元测试通过，且覆盖到新代码。
 
 
 **压力测试**
 
-github.com/ikenchina/octopus/test/perf/README.md 介绍了相关压力测试信息。
+压力测试请见文档 : [压力测试](test/perf/README.md)
 
