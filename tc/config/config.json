@@ -4,6 +4,7 @@
         "DataCenterId": 1
     },
     "GrpcListen": ":18080",
+    "HttpListen": ":18089",
     "MaxConcurrentTask": 10000,
     "MaxConcurrentBranch": 100,
     "Storages": {

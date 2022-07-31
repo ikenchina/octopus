@@ -140,7 +140,7 @@ func (tc *TcService) startHttpServer(listen string) error {
 		timer(c.FullPath(), c.Request.Method, strconv.Itoa(c.Writer.Status()))
 	})
 
-	app.GET("/debug/healthcheck", tc.HealthCheck)
+	app.Any("/debug/healthcheck", tc.HealthCheck)
 	app.GET("/debug/metrics", gin.WrapH(promhttp.Handler()))
 	app.Any("/debug/saga/:gtid", tc.sagaService.OpTxn)
 	app.Any("/debug/tcc/:gtid", tc.tccService.OpTxn)
@@ -234,9 +234,12 @@ func (tc *TcService) NewGtid(c *gin.Context) {
 }
 
 // RESTful APIs
-
 func (tc *TcService) HealthCheck(c *gin.Context) {
-	c.Status(200)
+	if c.Request.Method == http.MethodGet {
+		c.Status(200)
+	} else if c.Request.Method == http.MethodDelete {
+		tc.Stop()
+	}
 }
 
 var (

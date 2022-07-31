@@ -42,7 +42,6 @@ func (s *_Suite) TestSave() {
 
 	getSaga, err := ms.GetByGtid(context.Background(), saga.Gtid)
 	s.Nil(err)
-
 	s.True(compareSaga(saga, getSaga))
 }
 
@@ -238,9 +237,9 @@ func (s *_Suite) TestFindRunningLeaseExpired() {
 		idc := int64(math.MaxInt64)
 		for _, t := range ets {
 			s.True(compareTxnTime(t.LeaseExpireTime, expiredTime))
-			s.True(t.Id < idc)
+			s.True(t.LeaseExpireTime.Unix() <= idc)
 			s.True(slice.Contain(states, t.State))
-			idc = t.Id
+			idc = t.LeaseExpireTime.Unix()
 			t.SetState(define.TxnStateAborted)
 			s.Nil(ms.Update(context.Background(), t))
 		}
@@ -323,25 +322,19 @@ func (s *_Suite) TestRegisterBranches() {
 	ms, err := NewModelStorage(s.driver, s.dsn, s.timeout, 1, 1, s.lessee)
 	s.Nil(err)
 
-	txn := s.newSagaTxn(2)
-	var branches []*Branch
-	{
-		txn2 := s.newSagaTxn(2)
-		branches = txn2.Branches
-		for i, branch := range branches {
-			branch.Gtid = txn.Gtid
-			branch.Bid = i
-		}
-	}
-
 	// register expired record
 	{
 		txn := s.newSagaTxn(2)
-		txn.ExpireTime = time.Now().Add(-1 * time.Second)
+		txn.ExpireTime = time.Now().Add(-10 * time.Second)
+		bb := txn.Branches
+		txn.Branches = nil
 		s.Nil(ms.Save(context.TODO(), txn))
-		s.Equal(ErrInvalidLessee, ms.RegisterBranches(context.Background(), branches))
+		s.Equal(ErrInvalidLessee, ms.RegisterBranches(context.Background(), bb))
 	}
 
+	txn := s.newSagaTxn(2)
+	branches := txn.Branches
+	txn.Branches = nil
 	s.Nil(ms.Save(context.TODO(), txn))
 	s.Nil(ms.RegisterBranches(context.Background(), branches))
 }
@@ -365,6 +358,16 @@ func (s *_Suite) TestCleanExpiredTxns() {
 	ms, err := NewModelStorage(s.driver, s.dsn, s.timeout, 1, 1, s.lessee)
 	s.Nil(err)
 	states := []string{define.TxnStateAborted, define.TxnStateCommitted}
+
+	for {
+		now := time.Now()
+		expiredTime := now.Add(10 * time.Second)
+		expired, err := ms.CleanExpiredTxns(context.Background(), define.TxnTypeSaga, expiredTime, 20)
+		s.Nil(err)
+		if len(expired) == 0 {
+			break
+		}
+	}
 
 	for i := 0; i < 60; i++ {
 		txn := s.newSagaTxn(2)
@@ -450,7 +453,7 @@ func compareSaga(a, b *Txn) bool {
 		bb := b.Branches[i]
 
 		if aa.Id != bb.Id || aa.Gtid != bb.Gtid || aa.Bid != bb.Bid || aa.Action != bb.Action ||
-			bytes.Equal(aa.Payload, bb.Payload) || aa.Timeout != bb.Timeout ||
+			!bytes.Equal(aa.Payload, bb.Payload) || aa.Timeout != bb.Timeout ||
 			aa.State != bb.State || aa.Retry.MaxRetry != bb.Retry.MaxRetry ||
 			aa.TryCount != bb.TryCount {
 			return false

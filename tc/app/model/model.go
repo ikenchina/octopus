@@ -32,6 +32,7 @@ var (
 
 type ModelStorage interface {
 	Timeout() time.Duration
+	SetTimeout(t time.Duration)
 
 	// query
 	Exist(ctx context.Context, gtid string) error
@@ -99,6 +100,10 @@ func NewModelStorage(driver string, dsn string,
 
 func (ms *modelStorage) Timeout() time.Duration {
 	return ms.timeout
+}
+
+func (ms *modelStorage) SetTimeout(t time.Duration) {
+	ms.timeout = t
 }
 
 func (ms *modelStorage) timeoutContext(ctx context.Context) (context.Context, context.CancelFunc) {
@@ -291,7 +296,6 @@ func (ms *modelStorage) Save(ctx context.Context, txn *Txn) (err error) {
 	})
 
 	txn.EndSave()
-
 	return err
 }
 
@@ -320,8 +324,7 @@ func (ms *modelStorage) UpdateStateConditions(ctx context.Context, txn *Txn,
 		}
 
 		txr = tx.Model(&Txn{}).Where("gtid=?", txn.Gtid).
-			Update("state", txn.State).
-			Update("updated_time", gorm.Expr("NOW()"))
+			Updates(map[string]interface{}{"state": txn.State, "updated_time": gorm.Expr("NOW()")})
 		return txr.Error
 	}, ms.defaultTxOpt)
 
@@ -384,9 +387,10 @@ func (ms *modelStorage) GrantLease(ctx context.Context, txn *Txn, lease time.Dur
 	err = ms.Db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		txr := tx.Model(Txn{}).
 			Where("gtid=? AND (lessee = ? OR lease_expire_time < NOW())", txn.Gtid, ms.lessee).
-			Update("lessee", txn.Lessee).
-			Update("lease_expire_time", gorm.Expr(expire)).
-			Update("updated_time", gorm.Expr("NOW()"))
+			Updates(map[string]interface{}{
+				"lessee":            txn.Lessee,
+				"lease_expire_time": gorm.Expr(expire),
+				"updated_time":      gorm.Expr("NOW()")})
 		if txr.Error != nil {
 			return txr.Error
 		}
@@ -410,9 +414,8 @@ func (ms *modelStorage) GrantLeaseIncBranchCheckState(ctx context.Context, txn *
 	err = ms.Db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		txr := tx.Model(Txn{}).
 			Where("gtid=? AND (lessee = ? OR lease_expire_time < NOW()) AND state IN ?", txn.Gtid, ms.lessee, states).
-			Update("lease_expire_time", gorm.Expr(expire)).
-			Update("lessee", txn.Lessee).
-			Update("updated_time", gorm.Expr("NOW()"))
+			Updates(map[string]interface{}{"lease_expire_time": gorm.Expr(expire),
+				"lessee": txn.Lessee, "updated_time": gorm.Expr("NOW()")})
 		if txr.Error != nil {
 			return txr.Error
 		}

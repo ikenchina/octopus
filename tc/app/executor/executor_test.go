@@ -52,7 +52,8 @@ func (s *_baseSuite) getServerBranch(index int, saga *model.Txn) []*model.Branch
 
 func (s *_baseSuite) newTid() string {
 	s.tidCounter++
-	return fmt.Sprintf("tid_%d", s.tidCounter)
+	n := time.Now().UnixNano()
+	return fmt.Sprintf("tid_%d", n)
 }
 
 func (s *_baseSuite) initServers(txnType string) {

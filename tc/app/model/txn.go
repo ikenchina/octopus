@@ -18,15 +18,6 @@ const (
 	BranchTypeConfirm      = "confirm"
 	BranchTypeCancel       = "cancel"
 
-	// //
-	// TxnStatePrepared = "prepared"
-
-	// TxnStateFailed  = "failed"
-	// TxnStateAborted = "aborted"
-
-	// TxnStateCommitting = "committing"
-	// TxnStateCommitted  = "committed"
-
 	TxnCallTypeSync  = "sync"
 	TxnCallTypeAsync = "async"
 )

@@ -38,8 +38,7 @@ CREATE TABLE IF NOT EXISTS dtx.global_txn(
     notify_timeout BIGINT,
     notify_retry BIGINT,
     notify_count INT,
-    parallel_execution BOOLEAN DEFAULT false NOT NULL,
-    CONSTRAINT gtid_pk PRIMARY KEY(gtid) 
+    parallel_execution BOOLEAN DEFAULT false NOT NULL
 );
 CREATE UNIQUE INDEX global_txn_gtid_idx ON dtx.global_txn(gtid);
 CREATE INDEX global_txn_leaseexpire_state_running ON dtx.global_txn(lease_expire_time) WHERE state NOT IN ('committed', 'aborted', 'prepared');

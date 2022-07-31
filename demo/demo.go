@@ -72,7 +72,6 @@ func transfer() {
 func constructSagaRecords() []*saga_rm.BankAccountRecord {
 	records := []*saga_rm.BankAccountRecord{}
 	wage := 10
-	//fail := rand.Intn(10) < 5
 	for i := 0; i < *userCount; i++ {
 		if i == 0 {
 			records = append(records, &saga_rm.BankAccountRecord{
@@ -83,7 +82,6 @@ func constructSagaRecords() []*saga_rm.BankAccountRecord {
 			records = append(records, &saga_rm.BankAccountRecord{
 				UserID:  i,
 				Account: wage,
-				//Fail:    fail,
 			})
 		}
 	}
@@ -93,7 +91,6 @@ func constructSagaRecords() []*saga_rm.BankAccountRecord {
 func constructTccRecords() []*tcc_rm.BankAccountRecord {
 	records := []*tcc_rm.BankAccountRecord{}
 	wage := 10
-	//fail := rand.Intn(10) < 5
 	for i := 0; i < *userCount; i++ {
 		if i == 0 {
 			records = append(records, &tcc_rm.BankAccountRecord{
@@ -104,7 +101,6 @@ func constructTccRecords() []*tcc_rm.BankAccountRecord {
 			records = append(records, &tcc_rm.BankAccountRecord{
 				UserID:  i,
 				Account: wage,
-				//Fail:    fail,
 			})
 		}
 	}

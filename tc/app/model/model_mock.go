@@ -19,6 +19,7 @@ type modelStorageMock struct {
 	lessee string
 
 	records map[string]*Txn
+	timeout time.Duration
 }
 
 func NewModelStorageMock(lessee string) ModelStorage {
@@ -30,7 +31,14 @@ func NewModelStorageMock(lessee string) ModelStorage {
 }
 
 func (store *modelStorageMock) Timeout() time.Duration {
-	return 1 * time.Second
+	if store.timeout == 0 {
+		return 1 * time.Second
+	}
+	return store.timeout
+}
+
+func (store *modelStorageMock) SetTimeout(t time.Duration) {
+	store.timeout = t
 }
 
 func (store *modelStorageMock) Exist(ctx context.Context, gtid string) error {

@@ -103,6 +103,7 @@ func (se *SagaExecutor) startCrontab() {
 			return duration
 		}
 
+		logutil.Logger(ctx).Sugar().Debugf("cronjob : %d", len(tasks))
 		queuedTask := 0
 		for _, task := range tasks {
 			t := se.newTask(context.Background(), task)
@@ -304,6 +305,7 @@ func (se *SagaExecutor) grantLease(task *actionTask, branch *model.Branch, state
 	task.SetLeaseExpireTime(time.Now().Add(duration))
 	err := se.cfg.Store.GrantLeaseIncBranchCheckState(task.Ctx, task.Txn, branch, duration, states)
 	if err != nil {
+		logutil.Logger(context.Background()).Sugar().Errorf("grantLease : %v,  %v,  %v", task.Gtid, err, states)
 		return err
 	}
 	branch.TryCount += 1
@@ -370,6 +372,7 @@ func (se *SagaExecutor) commitBranch(task *actionTask, branch *model.Branch) err
 		return nil
 	}
 
+	logutil.Logger(task.Ctx).Sugar().Errorf("commitBranch : %v,  %v", task.Gtid, err)
 	if branch.BranchType == define.BranchTypeCommit {
 		if !branch.CanTry() {
 			branch.State = define.TxnStateRolling

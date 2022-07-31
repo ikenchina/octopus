@@ -159,7 +159,7 @@ func sagaRecords2(wage int) ([]*saga_rm.BankAccountRecord, bool) {
 
 func tccRecords2(wage int) ([]*tcc_rm.BankAccountRecord, bool) {
 	records := []*tcc_rm.BankAccountRecord{}
-	userCount := config.Ap.UserRange[1] - config.Ap.UserRange[0] + 1
+	userCount := config.Ap.UserRange[1] - config.Ap.UserRange[0] + 1 - config.Ap.TxnSize
 	user1 := rand.Intn(userCount) + config.Ap.UserRange[0]
 	bizUser := user1 * -1
 	fail := rand.Float32() < config.Ap.FailRate
@@ -169,7 +169,7 @@ func tccRecords2(wage int) ([]*tcc_rm.BankAccountRecord, bool) {
 	})
 	failIdx := rand.Intn(config.Ap.TxnSize)
 	for i := 0; i < config.Ap.TxnSize; i++ {
-		user := (user1+i)%config.Ap.UserRange[1] + config.Ap.UserRange[0]
+		user := user1 + i
 		records = append(records, &tcc_rm.BankAccountRecord{
 			UserID:  user,
 			Account: wage,

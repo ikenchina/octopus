@@ -1,0 +1,15 @@
+[Unit]
+Description=distributed transaction coordinator
+After=network-pre.target network.target network-online.target
+Wants=network-pre.target network.target network-online.target
+
+[Service]
+Type=simple
+User=dtx
+Restart=on-failure
+LimitNOFILE=102400
+
+ExecStart=/app/dtx/tc --config /app/dtx/tc/config.json
+
+[Install]
+WantedBy=multi-user.target

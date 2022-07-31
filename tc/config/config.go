@@ -58,7 +58,6 @@ func InitConfig(configPath string) error {
 
 	err = json.Unmarshal(dd, &cfg)
 	if err != nil {
-		fmt.Println(err)
 		return err
 	}
 

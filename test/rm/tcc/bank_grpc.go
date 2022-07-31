@@ -35,11 +35,9 @@ func (rm *TccRmBankGrpcService) Try(ctx context.Context, request *pb.TccRequest)
 	defer rmExecTimer.Timer()("try")
 
 	gtid, branchID := sgrpc.ParseContextMeta(ctx)
-
 	err := tccrm.HandleTryOrm(ctx, rm.db, gtid, branchID,
 		func(tx *gorm.DB) error {
 			txr := tx.Model(BankAccount{}).
-				//Where("id=? AND balance_freeze=0 AND balance+?>=0",
 				Where("id=? AND balance_freeze=0 ", request.GetUserId()).
 				Update("balance_freeze", request.GetAccount())
 
@@ -52,11 +50,11 @@ func (rm *TccRmBankGrpcService) Try(ctx context.Context, request *pb.TccRequest)
 			return nil
 		})
 	if err != nil {
-		logutil.Logger(context.TODO()).Sugar().Errorf("try err : %s %d %v", gtid, branchID, err)
+		logutil.Logger(context.TODO()).Sugar().Errorf("try err : %s, %d, %d,  %v", gtid, branchID, request.GetUserId(), err)
 		return nil, err
 	}
 
-	logutil.Logger(ctx).Sugar().Debugf("grpc try : %s, %v, %v", gtid, branchID, err)
+	//logutil.Logger(ctx).Sugar().Debugf("grpc try : %s, %v, %v", gtid, branchID, err)
 
 	return &pb.TccResponse{}, nil
 }
@@ -113,7 +111,7 @@ func (rm *TccRmBankGrpcService) Confirm(ctx context.Context, request *pb.TccRequ
 		return nil, err
 	}
 
-	logutil.Logger(ctx).Sugar().Debugf("grpc confirm : %s, %v, %v", gtid, branchID, err)
+	//logutil.Logger(ctx).Sugar().Debugf("grpc confirm : %s, %v, %v", gtid, branchID, err)
 
 	return &pb.TccResponse{}, nil
 }
@@ -141,7 +139,7 @@ func (rm *TccRmBankGrpcService) Cancel(ctx context.Context, request *pb.TccReque
 		logutil.Logger(context.TODO()).Sugar().Errorf("cancel err : %s %d %v", gtid, branchID, err)
 		return nil, err
 	}
-	logutil.Logger(ctx).Sugar().Debugf("grpc cancel : %s, %v, %v", gtid, branchID, err)
+	//	logutil.Logger(ctx).Sugar().Debugf("grpc cancel : %s, %v, %v", gtid, branchID, err)
 
 	return &pb.TccResponse{}, nil
 }
