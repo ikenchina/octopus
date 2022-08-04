@@ -224,6 +224,7 @@ func initAp(app *ap.Application) {
 		errorutil.PanicIfError(app.InitHttp(config.Ap.Listen))
 	}()
 
+	app.SetNotifyUrl(fmt.Sprintf("%s%s/saga/notify", config.Ap.Notify, config.Ap.Listen))
 	for _, rm := range config.Rm {
 		host, port := extractListen(rm.Listen)
 		r := fmt.Sprintf("%s:%s", host, port)

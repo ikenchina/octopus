@@ -28,9 +28,9 @@ CREATE TABLE IF NOT EXISTS dtx.global_txn(
     business character varying(32),
     state dtx.txn_state DEFAULT 'prepared'::dtx.txn_state NOT NULL,
     txn_type dtx.txn_type NOT NULL,
-    updated_time TIMESTAMP WITH TIME ZONE,
-	created_time TIMESTAMP WITH TIME ZONE,
-    expire_time TIMESTAMP WITH TIME ZONE,
+    updated_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	created_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    expire_time TIMESTAMP WITH TIME ZONE NOT NULL,
     lease_expire_time TIMESTAMP WITH TIME ZONE,
     lessee character varying(32),
     call_type dtx.txn_call_type DEFAULT 'sync'::dtx.txn_call_type NOT NULL,
@@ -66,8 +66,8 @@ CREATE TABLE IF NOT EXISTS dtx.branch_action(
     retry TEXT,
     try_count INT DEFAULT 0,
     state dtx.txn_state DEFAULT 'prepared'::dtx.txn_state NOT NULL,
-    updated_time TIMESTAMP WITH TIME ZONE,
-	created_time TIMESTAMP WITH TIME ZONE,
+    updated_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	created_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
     CONSTRAINT gtid_bid_type_branch_action UNIQUE (gtid, bid, branch_type)
 );
 CREATE INDEX branch_action_gtid_idx ON dtx.branch_action(gtid);

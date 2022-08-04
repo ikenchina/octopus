@@ -46,7 +46,7 @@ type Config struct {
 }
 
 func NewSagaService(cfg Config, idGenerator idgenerator.IdGenerator) (*SagaService, error) {
-	store, err := model.NewModelStorage(cfg.Store.Driver, cfg.Store.Dsn,
+	store, err := model.NewModelStorage("saga", cfg.Store.Driver, cfg.Store.Dsn,
 		cfg.Store.Timeout, cfg.Store.MaxConnections, cfg.Store.MaxIdleConnections, cfg.Lessee)
 	if err != nil {
 		return nil, err

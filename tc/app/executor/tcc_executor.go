@@ -81,7 +81,7 @@ func (te *TccExecutor) startCrontab() {
 				continue
 			}
 			found[task.Gtid] = struct{}{}
-			t := te.newTask(context.Background(), task)
+			t := te.newTask(context.Background(), task, "cron")
 			if te.startTask(t) != nil {
 				continue
 			}
@@ -98,8 +98,8 @@ func (te *TccExecutor) startCrontab() {
 	})
 }
 
-func (te *TccExecutor) newTask(ctx context.Context, txn *model.Txn) *actionTask {
-	t := newTask(ctx, txn, func(s, e time.Time, err error) {
+func (te *TccExecutor) newTask(ctx context.Context, txn *model.Txn, process string) *actionTask {
+	t := newTask(ctx, txn, process, func(s, e time.Time, err error) {
 		stateGauge.Set(float64(te.taskCount()), te.txnType, "inflight")
 	})
 	return t
@@ -114,7 +114,7 @@ func (te *TccExecutor) Prepare(ctx context.Context, txn *model.Txn) *ActionFutur
 	te.wait.Add(1)
 	defer te.wait.Done()
 	txn.Branches = nil
-	st := te.newTask(ctx, txn)
+	st := te.newTask(ctx, txn, "prepare")
 	if te.isClosed() {
 		st.finish(ErrExecutorClosed)
 		return st.future()
@@ -130,7 +130,7 @@ func (te *TccExecutor) Register(ctx context.Context, txn *model.Txn) *ActionFutu
 	te.wait.Add(1)
 	defer te.wait.Done()
 
-	st := te.newTask(ctx, txn)
+	st := te.newTask(ctx, txn, "register")
 	if te.isClosed() {
 		st.finish(ErrExecutorClosed)
 		return st.future()
@@ -143,19 +143,19 @@ func (te *TccExecutor) Register(ctx context.Context, txn *model.Txn) *ActionFutu
 
 // state : prepared -> committing
 func (te *TccExecutor) Commit(ctx context.Context, txn *model.Txn) *ActionFuture {
-	return te.endTxn(ctx, txn, define.TxnStateCommitting)
+	return te.endTxn(ctx, txn, define.BranchTypeConfirm, define.TxnStateCommitting)
 }
 
 // state : prepared -> rolling
 func (te *TccExecutor) Rollback(ctx context.Context, txn *model.Txn) *ActionFuture {
-	return te.endTxn(ctx, txn, define.TxnStateRolling)
+	return te.endTxn(ctx, txn, define.BranchTypeCancel, define.TxnStateRolling)
 }
 
-func (te *TccExecutor) endTxn(ctx context.Context, txn *model.Txn, state string) *ActionFuture {
+func (te *TccExecutor) endTxn(ctx context.Context, txn *model.Txn, branchType, state string) *ActionFuture {
 	te.wait.Add(1)
 	defer te.wait.Done()
 
-	st := te.newTask(ctx, txn)
+	st := te.newTask(ctx, txn, state)
 	if te.isClosed() {
 		st.finish(ErrExecutorClosed)
 		return st.future()
@@ -172,22 +172,10 @@ func (te *TccExecutor) endTxn(ctx context.Context, txn *model.Txn, state string)
 		te.finishTask(st, err)
 		return st.future()
 	}
-	st.Txn = dbTxn
 
-	st.Txn.SetState(state)
-	te.setTxnLease(st, operator.IfElse(state == define.TxnStateCommitting,
-		define.BranchTypeConfirm, define.BranchTypeCancel).(string))
-	err = te.cfg.Store.UpdateConditions(st.Ctx, st.Txn, func(old_txn *model.Txn) error {
-		switch old_txn.State {
-		case define.TxnStateCommitting, define.TxnStateRolling:
-			return ErrInProgress
-		case define.TxnStateAborted:
-			return ErrStateIsAborted
-		case define.TxnStateCommitted:
-			return ErrStateIsCommitted
-		}
-		return nil
-	})
+	st.Txn = dbTxn
+	te.setTxnLease(st, branchType)
+	err = te.stateTransition(st, []string{define.TxnStatePrepared}, state, true)
 	if err != nil {
 		te.finishTask(st, err)
 		return st.future()
@@ -222,7 +210,8 @@ func (te *TccExecutor) process(tcc *actionTask) {
 	} else if tcc.State == define.TxnStateRolling {
 		te.processAction(tcc, define.BranchTypeCancel, define.TxnStateRolling)
 	} else if slice.InSlice(tcc.State, define.TxnStateCommitted, define.TxnStateAborted) {
-		err := te.updateState(tcc, []string{define.TxnStateCommitting, define.TxnStateRolling, tcc.State}, tcc.State)
+		// state of database might be committing or rolling
+		err := te.changeState(tcc, []string{define.TxnStateCommitting, define.TxnStateRolling, tcc.State}, tcc.State, false)
 		if err != nil {
 			return
 		}
@@ -230,13 +219,25 @@ func (te *TccExecutor) process(tcc *actionTask) {
 	} else { // prepared
 		// notice, clock skew between db and server
 		if tcc.ExpireTime.Before(time.Now()) {
-			err := te.updateState(tcc, []string{define.TxnStatePrepared, define.TxnStateRolling}, define.TxnStateRolling)
+			err := te.changeState(tcc, []string{define.TxnStatePrepared, define.TxnStateRolling}, define.TxnStateRolling, true)
 			if err != nil {
 				return
 			}
 			te.processAction(tcc, define.BranchTypeCancel, define.TxnStateRolling)
 		}
 	}
+}
+
+func (te *TccExecutor) changeState(task *actionTask, srcStates []string, state string, getUpdatedTxn bool) error {
+	err := te.stateTransition(task, srcStates, state, getUpdatedTxn)
+	if err == nil {
+		return nil
+	}
+	if !te.finishTaskFatalError(task, err) {
+		te.schedule(task, te.cfg.Store.Timeout())
+	}
+	logutil.Logger(task.Ctx).Sugar().Errorf("state transition : gtid(%s), src(%v), state(%v), error(%v)", task.Gtid, srcStates, state, err)
+	return err
 }
 
 func (te *TccExecutor) grantBranchLease(task *actionTask, branch *model.Branch, states []string) error {
@@ -272,7 +273,6 @@ func (te *TccExecutor) processAction(tcc *actionTask, branchType string, state s
 
 	for _, branch := range tcc.Branches {
 		if branch.BranchType == branchType && branch.State == define.TxnStatePrepared {
-
 			err := te.grantBranchLease(tcc, branch, []string{state})
 			if err != nil {
 				te.finishTask(tcc, err)
@@ -290,10 +290,9 @@ func (te *TccExecutor) processAction(tcc *actionTask, branchType string, state s
 		}
 	}
 
-	tcc.SetState(operator.IfElse(branchType == define.BranchTypeConfirm, define.TxnStateCommitted,
-		define.TxnStateAborted).(string))
-	expectedStates := []string{define.TxnStateCommitting, define.TxnStateRolling, tcc.State}
-	err := te.updateState(tcc, expectedStates, tcc.State)
+	newState := operator.IfElse(branchType == define.BranchTypeConfirm, define.TxnStateCommitted, define.TxnStateAborted).(string)
+	fromStates := []string{define.TxnStateCommitting, define.TxnStateRolling, newState}
+	err := te.changeState(tcc, fromStates, newState, false)
 	if err != nil {
 		return
 	}

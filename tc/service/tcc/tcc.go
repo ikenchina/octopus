@@ -32,11 +32,13 @@ func (ss *TccService) convertToModel(tr *define.TccRequest) (*model.Txn, error) 
 	}
 
 	now := time.Now()
+	if tr.ExpireTime.Before(now) {
+		return nil, ErrInvalidExpireTime
+	}
+
 	txn := &model.Txn{
 		Gtid:              tr.Gtid,
 		TxnType:           model.TxnTypeTcc,
-		CreatedTime:       now,
-		UpdatedTime:       now,
 		ExpireTime:        tr.ExpireTime,
 		Lessee:            tr.Lessee,
 		CallType:          model.TxnCallTypeSync,
@@ -71,15 +73,13 @@ func (ss *TccService) convertBranchToModel(tb *define.TccBranch, gtid string, no
 
 	branches := []*model.Branch{}
 	branches = append(branches, &model.Branch{
-		Gtid:        gtid,
-		Bid:         tb.BranchId,
-		BranchType:  model.BranchTypeConfirm,
-		Action:      tb.ActionConfirm,
-		Payload:     tb.Payload,
-		Timeout:     tb.Timeout,
-		CreatedTime: now,
-		UpdatedTime: now,
-		State:       define.TxnStatePrepared,
+		Gtid:       gtid,
+		Bid:        tb.BranchId,
+		BranchType: model.BranchTypeConfirm,
+		Action:     tb.ActionConfirm,
+		Payload:    tb.Payload,
+		Timeout:    tb.Timeout,
+		State:      define.TxnStatePrepared,
 		Retry: model.RetryStrategy{
 			Constant: &model.RetryConstant{
 				Duration: tb.Retry,
@@ -87,15 +87,13 @@ func (ss *TccService) convertBranchToModel(tb *define.TccBranch, gtid string, no
 		},
 	},
 		&model.Branch{
-			Gtid:        gtid,
-			Bid:         tb.BranchId,
-			BranchType:  model.BranchTypeCancel,
-			Action:      tb.ActionCancel,
-			Payload:     tb.Payload,
-			Timeout:     tb.Timeout,
-			CreatedTime: now,
-			UpdatedTime: now,
-			State:       define.TxnStatePrepared,
+			Gtid:       gtid,
+			Bid:        tb.BranchId,
+			BranchType: model.BranchTypeCancel,
+			Action:     tb.ActionCancel,
+			Payload:    tb.Payload,
+			Timeout:    tb.Timeout,
+			State:      define.TxnStatePrepared,
 			Retry: model.RetryStrategy{
 				Constant: &model.RetryConstant{
 					Duration: tb.Retry,

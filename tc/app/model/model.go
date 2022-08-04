@@ -27,7 +27,7 @@ var (
 )
 
 var (
-	sagaModelTimer = metrics.NewTimer("dtx", "tc", "saga_model", "saga model timer", []string{"op", "ret"})
+	sagaModelTimer = metrics.NewTimer("dtx", "tc", "model", "saga model timer", []string{"type", "op", "ret"})
 )
 
 type ModelStorage interface {
@@ -41,7 +41,7 @@ type ModelStorage interface {
 	// update
 	Save(ctx context.Context, t *Txn) error
 	Update(ctx context.Context, t *Txn) error
-	UpdateConditions(ctx context.Context, txn *Txn, cb func(oldTxn *Txn) error) error
+	UpdateConditions(ctx context.Context, txn *Txn, cb func(oldTxn *Txn) error, returning bool) (*Txn, error)
 	UpdateStateConditions(ctx context.Context, txn *Txn, cb func(oldTxn *Txn) error) (err error)
 	GrantLease(ctx context.Context, txn *Txn, lease time.Duration) error
 	GrantLeaseIncBranchCheckState(ctx context.Context, txn *Txn, branch *Branch,
@@ -49,7 +49,6 @@ type ModelStorage interface {
 
 	// branch
 	UpdateBranch(ctx context.Context, b *Branch) error
-	UpdateBranchConditions(ctx context.Context, b *Branch, cb func(oldTxn *Txn, ob *Branch) error) error
 	RegisterBranches(ctx context.Context, bs []*Branch) error
 
 	// find expired transactions
@@ -63,12 +62,15 @@ type modelStorage struct {
 	timeout      time.Duration
 	lessee       string
 	defaultTxOpt *sql.TxOptions
+	txnType      string
 }
 
-func NewModelStorage(driver string, dsn string,
+func NewModelStorage(txnType string, driver string, dsn string,
 	timeout time.Duration, maxConn int, MaxIdleConn int,
 	lessee string) (ModelStorage, error) {
-	store := &modelStorage{}
+	store := &modelStorage{
+		txnType: txnType,
+	}
 	switch driver {
 	case "postgresql":
 		db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
@@ -115,7 +117,7 @@ func (ms *modelStorage) timeoutContext(ctx context.Context) (context.Context, co
 }
 
 func (ms *modelStorage) Exist(ctx context.Context, gtid string) (err error) {
-	defer sagaModelTimer.Timer()("Exist", operator.IfElse((err != nil), "err", "ok").(string))
+	defer sagaModelTimer.Timer()(ms.txnType, "Exist", operator.IfElse((err != nil), "err", "ok").(string))
 
 	ctx, cancel := ms.timeoutContext(ctx)
 	defer cancel()
@@ -134,7 +136,7 @@ func (ms *modelStorage) Exist(ctx context.Context, gtid string) (err error) {
 }
 
 func (ms *modelStorage) GetByGtid(ctx context.Context, gtid string) (txn *Txn, err error) {
-	defer sagaModelTimer.Timer()("GetByGtid", operator.IfElse((err != nil), "err", "ok").(string))
+	defer sagaModelTimer.Timer()(ms.txnType, "GetByGtid", operator.IfElse((err != nil), "err", "ok").(string))
 
 	ctx, cancel := ms.timeoutContext(ctx)
 	defer cancel()
@@ -169,7 +171,7 @@ func (ms *modelStorage) GetByGtid(ctx context.Context, gtid string) (txn *Txn, e
 //
 // expired, and state is prepared
 func (ms *modelStorage) FindPreparedExpired(ctx context.Context, txnType string, limit int) (txns []*Txn, err error) {
-	defer sagaModelTimer.Timer()("FindPreparedExpired", operator.IfElse((err != nil), "err", "ok").(string))
+	defer sagaModelTimer.Timer()(ms.txnType, "FindPreparedExpired", operator.IfElse((err != nil), "err", "ok").(string))
 
 	ctx, cancel := ms.timeoutContext(ctx)
 	defer cancel()
@@ -204,7 +206,7 @@ func (ms *modelStorage) FindPreparedExpired(ctx context.Context, txnType string,
 
 // lease is expired, and state is not one of commmitted, aborted, prepared
 func (ms *modelStorage) FindRunningLeaseExpired(ctx context.Context, txnType string, limit int) (txns []*Txn, err error) {
-	defer sagaModelTimer.Timer()("FindRunningLeaseExpired", operator.IfElse((err != nil), "err", "ok").(string))
+	defer sagaModelTimer.Timer()(ms.txnType, "FindRunningLeaseExpired", operator.IfElse((err != nil), "err", "ok").(string))
 
 	ctx, cancel := ms.timeoutContext(ctx)
 	defer cancel()
@@ -237,7 +239,7 @@ func (ms *modelStorage) FindRunningLeaseExpired(ctx context.Context, txnType str
 
 // expired, and state is committed or aborted
 func (ms *modelStorage) CleanExpiredTxns(ctx context.Context, txnType string, untilTime time.Time, limit int) (txns []*Txn, err error) {
-	defer sagaModelTimer.Timer()("CleanExpiredTxns", operator.IfElse((err != nil), "err", "ok").(string))
+	defer sagaModelTimer.Timer()(ms.txnType, "CleanExpiredTxns", operator.IfElse((err != nil), "err", "ok").(string))
 
 	ctx, cancel := ms.timeoutContext(ctx)
 	defer cancel()
@@ -280,7 +282,7 @@ func (ms *modelStorage) CleanExpiredTxns(ctx context.Context, txnType string, un
 }
 
 func (ms *modelStorage) Save(ctx context.Context, txn *Txn) (err error) {
-	defer sagaModelTimer.Timer()("Save", operator.IfElse((err != nil), "err", "ok").(string))
+	defer sagaModelTimer.Timer()(ms.txnType, "Save", operator.IfElse((err != nil), "err", "ok").(string))
 	ctx, cancel := ms.timeoutContext(ctx)
 	defer cancel()
 
@@ -301,7 +303,7 @@ func (ms *modelStorage) Save(ctx context.Context, txn *Txn) (err error) {
 
 func (ms *modelStorage) UpdateStateConditions(ctx context.Context, txn *Txn,
 	cb func(oldTxn *Txn) error) (err error) {
-	defer sagaModelTimer.Timer()("UpdateStateConditions", operator.IfElse((err != nil), "err", "ok").(string))
+	defer sagaModelTimer.Timer()(ms.txnType, "UpdateStateConditions", operator.IfElse((err != nil), "err", "ok").(string))
 
 	ctx, cancel := ms.timeoutContext(ctx)
 	defer cancel()
@@ -334,12 +336,13 @@ func (ms *modelStorage) UpdateStateConditions(ctx context.Context, txn *Txn,
 	return err
 }
 
-func (ms *modelStorage) UpdateConditions(ctx context.Context, txn *Txn, cb func(oldTxn *Txn) error) (err error) {
-	defer sagaModelTimer.Timer()("UpdateConditions", operator.IfElse((err != nil), "err", "ok").(string))
+func (ms *modelStorage) UpdateConditions(ctx context.Context, txn *Txn, cb func(oldTxn *Txn) error, returning bool) (newTxn *Txn, err error) {
+	defer sagaModelTimer.Timer()(ms.txnType, "UpdateConditions", operator.IfElse((err != nil), "err", "ok").(string))
 
 	ctx, cancel := ms.timeoutContext(ctx)
 	defer cancel()
 
+	newTxn = &Txn{}
 	txn.BeginSave()
 	err = ms.Db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		dbTxn := &Txn{}
@@ -369,17 +372,33 @@ func (ms *modelStorage) UpdateConditions(ctx context.Context, txn *Txn, cb func(
 				}
 			}
 		}
+
+		if returning {
+			txr := tx.Model(&Txn{}).Where("gtid=?", txn.Gtid).Find(newTxn)
+			if txr.Error != nil {
+				return txr.Error
+			}
+			if txr.RowsAffected == 0 {
+				return ErrNotExist
+			}
+
+			txr = tx.Model(&Branch{}).Where("gtid=?", txn.Gtid).Order("id ASC").Find(&newTxn.Branches)
+			if txr.Error != nil && txr.Error != gorm.ErrRecordNotFound {
+				return fmt.Errorf("db error : %v", txr.Error)
+			}
+		}
+
 		return nil
 	}, ms.defaultTxOpt)
 
 	if err == nil {
 		txn.EndSave()
 	}
-	return err
+	return newTxn, err
 }
 
 func (ms *modelStorage) GrantLease(ctx context.Context, txn *Txn, lease time.Duration) (err error) {
-	defer sagaModelTimer.Timer()("GrantLease", operator.IfElse((err != nil), "err", "ok").(string))
+	defer sagaModelTimer.Timer()(ms.txnType, "GrantLease", operator.IfElse((err != nil), "err", "ok").(string))
 
 	expire := fmt.Sprintf("NOW() + interval '%v millisecond'", lease.Milliseconds())
 	ctx, cancel := ms.timeoutContext(ctx)
@@ -404,7 +423,7 @@ func (ms *modelStorage) GrantLease(ctx context.Context, txn *Txn, lease time.Dur
 
 func (ms *modelStorage) GrantLeaseIncBranchCheckState(ctx context.Context, txn *Txn, branch *Branch,
 	leaseDuration time.Duration, states []string) (err error) {
-	defer sagaModelTimer.Timer()("GrantLeaseIncBranchCheckState", operator.IfElse((err != nil), "err", "ok").(string))
+	defer sagaModelTimer.Timer()(ms.txnType, "GrantLeaseIncBranchCheckState", operator.IfElse((err != nil), "err", "ok").(string))
 
 	ctx, cancel := ms.timeoutContext(ctx)
 	defer cancel()
@@ -433,7 +452,7 @@ func (ms *modelStorage) GrantLeaseIncBranchCheckState(ctx context.Context, txn *
 }
 
 func (ms *modelStorage) Update(ctx context.Context, txn *Txn) (err error) {
-	defer sagaModelTimer.Timer()("Update", operator.IfElse((err != nil), "err", "ok").(string))
+	defer sagaModelTimer.Timer()(ms.txnType, "Update", operator.IfElse((err != nil), "err", "ok").(string))
 	ctx, cancel := ms.timeoutContext(ctx)
 	defer cancel()
 
@@ -476,7 +495,7 @@ func (ms *modelStorage) Update(ctx context.Context, txn *Txn) (err error) {
 }
 
 func (ms *modelStorage) UpdateBranch(ctx context.Context, branch *Branch) (err error) {
-	defer sagaModelTimer.Timer()("UpdateBranch", operator.IfElse((err != nil), "err", "ok").(string))
+	defer sagaModelTimer.Timer()(ms.txnType, "UpdateBranch", operator.IfElse((err != nil), "err", "ok").(string))
 	ctx, cancel := ms.timeoutContext(ctx)
 	defer cancel()
 
@@ -509,53 +528,8 @@ func (ms *modelStorage) UpdateBranch(ctx context.Context, branch *Branch) (err e
 	return err
 }
 
-func (ms *modelStorage) UpdateBranchConditions(ctx context.Context, branch *Branch, cb func(oldTxn *Txn, oldBranch *Branch) error) (err error) {
-	defer sagaModelTimer.Timer()("UpdateBranchConditions", operator.IfElse((err != nil), "err", "ok").(string))
-	ctx, cancel := ms.timeoutContext(ctx)
-	defer cancel()
-
-	branch.BeginSave()
-
-	err = ms.Db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		dbTxn := &Txn{}
-		txr := tx.Where("gtid=? AND (lessee = ? OR lease_expire_time < NOW())",
-			branch.Gtid, ms.lessee).Find(dbTxn)
-		if txr.Error != nil {
-			return txr.Error
-		}
-		if txr.RowsAffected == 0 {
-			return ErrInvalidLessee
-		}
-
-		dbBranch := &Branch{}
-		txr = tx.Model(Branch{}).Where("id=?", branch.Id).First(&dbBranch)
-		if txr.Error != nil {
-			return tx.Error
-		}
-
-		err := cb(dbTxn, dbBranch)
-		if err != nil {
-			return err
-		}
-
-		txr = tx.Model(branch).Select(branch.getUpdateFields()).Updates(branch)
-		if txr.Error != nil {
-			return txr.Error
-		}
-		if txr.RowsAffected == 0 {
-			return ErrNotExist
-		}
-		return nil
-	}, ms.defaultTxOpt)
-
-	if err == nil {
-		branch.EndSave()
-	}
-	return err
-}
-
 func (ms *modelStorage) RegisterBranches(ctx context.Context, branches []*Branch) (err error) {
-	defer sagaModelTimer.Timer()("RegisterBranches", operator.IfElse((err != nil), "err", "ok").(string))
+	defer sagaModelTimer.Timer()(ms.txnType, "RegisterBranches", operator.IfElse((err != nil), "err", "ok").(string))
 	if len(branches) == 0 {
 		return nil
 	}
@@ -565,8 +539,11 @@ func (ms *modelStorage) RegisterBranches(ctx context.Context, branches []*Branch
 
 	err = ms.Db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		dbtxn := &Txn{}
-		txr := tx.Where("gtid=? AND expire_time > NOW() and state = ?",
-			branches[0].Gtid, define.TxnStatePrepared).Find(dbtxn)
+		//Isolation is RR, so must update dtx.global_txn to block UpdateConditions function
+		//corner case : create a new branch, it is not visible to previous transactions,
+		//   so maybe UpdateConditions transaction can't read new branch
+		txr := tx.Model(dbtxn).Where("gtid=? AND expire_time > NOW() and state = ?",
+			branches[0].Gtid, define.TxnStatePrepared).Update("updated_time", gorm.Expr("NOW()"))
 		if txr.Error != nil {
 			return txr.Error
 		}
@@ -574,12 +551,9 @@ func (ms *modelStorage) RegisterBranches(ctx context.Context, branches []*Branch
 		if txr.RowsAffected == 0 {
 			return ErrInvalidLessee
 		}
-		if dbtxn.State != define.TxnStatePrepared {
-			return ErrIsNotPrepared
-		}
 
 		txr = tx.Model(&Branch{}).Create(branches)
 		return txr.Error
-	})
+	}, ms.defaultTxOpt)
 	return err
 }

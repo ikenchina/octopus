@@ -14,7 +14,7 @@
 - 初始化测试用户
 ```
 // 以发工资为例，负数是公司的账户，正数是员工的账户
-insert into dtx.account(id) select * from generate_series(-10000, 10000);
+insert into testdtx.account(id) select * from generate_series(-10000, 10000);
 ```
 
 然后运行二进制

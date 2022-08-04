@@ -99,6 +99,7 @@ func (tc *TcService) Start() {
 			defer wait.Done()
 			err := tc.startHttpServer(cfg.HttpListen)
 			if err != nil && err != http.ErrServerClosed {
+				logutil.Logger(context.Background()).Sugar().Errorf("start http server error : %v", err)
 				tc.stop()
 			}
 		})
@@ -110,6 +111,7 @@ func (tc *TcService) Start() {
 			defer wait.Done()
 			err := tc.startGrpcServer(cfg.GrpcListen)
 			if err != nil && err != grpc.ErrServerStopped {
+				logutil.Logger(context.Background()).Sugar().Errorf("start grpc server error : %v", err)
 				tc.stop()
 			}
 		})

@@ -20,7 +20,7 @@ func (app *TccApplication) Transfer(users []*tcc_rm.BankAccountRecord) (*pb.TccR
 	tccCtx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
-	transactionExpireTime := time.Now().Add(time.Second)
+	transactionExpireTime := time.Now().Add(2 * time.Minute)
 
 	tccResp, err := tcc_cli.TccTransaction(tccCtx, app.tcClient, transactionExpireTime,
 		func(ctx context.Context, t *tcc_cli.Transaction, gtid string) error {

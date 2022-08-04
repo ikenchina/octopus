@@ -2,10 +2,12 @@
 # SQL
 
 
-Create account table on dtx database.
+Create account table on testdtx database.
 
 ```
-CREATE TABLE IF NOT ExISTS dtx.account(
+CREATE SCHEMA testdtx;
+
+CREATE TABLE IF NOT ExISTS testdtx.account(
 	id BIGSERIAL PRIMARY key,
 	balance INT NOT NULL DEFAULT 0,
 	balance_freeze INT NOT NULL DEFAULT 0
@@ -14,5 +16,5 @@ CREATE TABLE IF NOT ExISTS dtx.account(
 
 根据需要，创建相关的测试用户，
 ```
-insert into dtx.account(id) select * from generate_series(-10, 10);
+insert into testdtx.account(id) select * from generate_series(-10, 10);
 ```

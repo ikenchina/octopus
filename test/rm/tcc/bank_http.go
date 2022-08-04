@@ -216,11 +216,11 @@ type BankAccount struct {
 }
 
 func (*BankAccount) TableName() string {
-	return "dtx.account"
+	return "dtx4.account"
 }
 
 /*
-CREATE TABLE IF NOT ExISTS dtx.account(
+CREATE TABLE IF NOT ExISTS dtx4.account(
 	id BIGSERIAL PRIMARY key,
 	balance INT NOT NULL DEFAULT 0,
 	balance_freeze INT NOT NULL DEFAULT 0

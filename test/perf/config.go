@@ -11,6 +11,7 @@ type ApConfig struct {
 	TxnSize     int
 	FailRate    float32
 	TcDomain    string
+	Notify      string
 }
 
 type RmConfig struct {

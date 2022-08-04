@@ -10,7 +10,8 @@
         ],
         "TxnSize": 3,
         "FailRate": 0,
-        "TcDomain": "localhost:18080"
+        "TcDomain": "localhost:18080",
+        "Notify":"http://127.0.0.1"
     },
     "Rm": [
         {

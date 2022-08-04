@@ -16,7 +16,7 @@ func (app *SagaApplication) Pay(users []*saga_rm.BankAccountRecord) (*pb.SagaRes
 	defer cancel()
 
 	notifyAction := app.notifyUrl
-	transactionExpiredTime := time.Now().Add(1 * time.Minute)
+	transactionExpiredTime := time.Now().Add(2 * time.Minute)
 
 	resp, err := saga_cli.SagaTransaction(ctx, app.tcClient, transactionExpiredTime,
 		func(t *saga_cli.Transaction, gtid string) error {

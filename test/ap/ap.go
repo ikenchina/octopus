@@ -2,7 +2,6 @@ package ap
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"sync"
 
@@ -12,7 +11,6 @@ import (
 )
 
 func (app *Application) InitHttp(listen string) error {
-	app.notifyUrl = fmt.Sprintf("http://localhost%s/saga/notify", listen)
 	ginApp := gin.New()
 	ginApp.POST("/saga/notify", app.notifyHandler)
 	ginApp.GET("/debug/metrics", gin.WrapH(promhttp.Handler()))
@@ -39,6 +37,10 @@ type Application struct {
 
 func (app *Application) AddBank(bank Bank) {
 	app.banks = append(app.banks, bank)
+}
+
+func (app *Application) SetNotifyUrl(url string) {
+	app.notifyUrl = url
 }
 
 func (app *Application) notifyHandler(c *gin.Context) {

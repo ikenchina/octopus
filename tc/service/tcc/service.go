@@ -45,7 +45,7 @@ type Config struct {
 }
 
 func NewTccService(cfg Config, idGenerator idgenerator.IdGenerator) (*TccService, error) {
-	store, err := model.NewModelStorage(cfg.Store.Driver, cfg.Store.Dsn, cfg.Store.Timeout,
+	store, err := model.NewModelStorage("tcc", cfg.Store.Driver, cfg.Store.Dsn, cfg.Store.Timeout,
 		cfg.Store.MaxConnections, cfg.Store.MaxIdleConnections, cfg.Lessee)
 	if err != nil {
 		return nil, err

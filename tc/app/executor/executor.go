@@ -30,7 +30,7 @@ var (
 )
 
 var (
-	txnTimer     = metrics.NewTimer("dtx", "tc", "txn", "txn timer", []string{"type", "ret"})
+	txnTimer     = metrics.NewTimer("dtx", "tc", "txn", "txn timer", []string{"type", "process", "ret"})
 	branchTimer  = metrics.NewTimer("dtx", "tc", "branch", "branch timer", []string{"type", "branch"})
 	stateGauge   = metrics.NewGaugeVec("dtx", "tc", "txn_state", "state", []string{"type", "state"})
 	processTimer = metrics.NewTimer("dtx", "tc", "process", "process", []string{"type", "op"})
@@ -99,6 +99,7 @@ type actionTask struct {
 	startTime    time.Time
 	finishCB     func(start, end time.Time, err error)
 	sheduleCount int32
+	process      string
 }
 
 func (s *actionTask) incrScheduleCount() {
@@ -131,16 +132,17 @@ func (s *actionTask) finish(err error) {
 	if s.finishCB != nil {
 		s.finishCB(s.startTime, now, err)
 	}
-	txnTimer.Observe(now.Sub(s.startTime), s.TxnType, operator.IfElse(err == nil, "ok", "err").(string))
+	txnTimer.Observe(now.Sub(s.startTime), s.TxnType, s.process, operator.IfElse(err == nil, "ok", "err").(string))
 }
 
-func newTask(ctx context.Context, txn *model.Txn, finishCB func(start, end time.Time, err error)) *actionTask {
+func newTask(ctx context.Context, txn *model.Txn, process string, finishCB func(start, end time.Time, err error)) *actionTask {
 	return &actionTask{
 		Txn:       txn,
 		Ctx:       ctx,
 		errChan:   make(chan error, 1),
 		startTime: time.Now(),
 		finishCB:  finishCB,
+		process:   process,
 	}
 }
 
@@ -346,28 +348,24 @@ func (ex *baseExecutor) finishTaskFatalError(task *actionTask, err error) bool {
 	return false
 }
 
-func (ex *baseExecutor) updateState(task *actionTask, srcStates []string, state string) error {
+func (ex *baseExecutor) stateTransition(task *actionTask, srcStates []string, state string, getUpdatedTxn bool) error {
 	originState := task.State
 	task.SetState(state)
-	err := ex.cfg.Store.UpdateConditions(task.Ctx, task.Txn, func(oldTxn *model.Txn) error {
+	newTxn, err := ex.cfg.Store.UpdateConditions(task.Ctx, task.Txn, func(oldTxn *model.Txn) error {
 		if !slice.Contain(srcStates, oldTxn.State) {
 			return fmt.Errorf("src(%v), old(%v), state(%s), %w", srcStates, oldTxn.State, state, ErrInvalidState)
 		}
 		return nil
-	})
-	if err == nil {
-		return nil
+	}, getUpdatedTxn)
+	if err != nil {
+		task.SetState(originState)
+		return err
 	}
 
-	task.SetState(originState)
-	if !ex.finishTaskFatalError(task, err) {
-		ex.schedule(task, ex.cfg.Store.Timeout())
+	if getUpdatedTxn {
+		task.Txn = newTxn
 	}
-
-	logutil.Logger(task.Ctx).Sugar().Errorf("save state : gtid(%s), src(%v), state(%v), error(%v)",
-		task.Gtid, srcStates, state, err)
-
-	return err
+	return nil
 }
 
 func (ex *baseExecutor) schedule(task *actionTask, after time.Duration) {

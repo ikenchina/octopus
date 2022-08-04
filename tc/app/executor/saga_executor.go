@@ -46,8 +46,8 @@ func (se *SagaExecutor) Get(ctx context.Context, gtid string) (*model.Txn, error
 	return se.getTask(ctx, gtid)
 }
 
-func (se *SagaExecutor) newTask(ctx context.Context, txn *model.Txn) *actionTask {
-	t := newTask(ctx, txn, func(s, e time.Time, err error) {
+func (se *SagaExecutor) newTask(ctx context.Context, txn *model.Txn, process string) *actionTask {
+	t := newTask(ctx, txn, process, func(s, e time.Time, err error) {
 		stateGauge.Set(float64(se.taskCount()), se.txnType, "inflight")
 	})
 	return t
@@ -57,7 +57,7 @@ func (se *SagaExecutor) Commit(ctx context.Context, txn *model.Txn) *ActionFutur
 	se.wait.Add(1)
 	defer se.wait.Done()
 
-	st := se.newTask(ctx, txn)
+	st := se.newTask(ctx, txn, "commit")
 	if se.isClosed() {
 		st.finish(ErrExecutorClosed)
 		return st.future()
@@ -106,7 +106,7 @@ func (se *SagaExecutor) startCrontab() {
 		logutil.Logger(ctx).Sugar().Debugf("cronjob : %d", len(tasks))
 		queuedTask := 0
 		for _, task := range tasks {
-			t := se.newTask(context.Background(), task)
+			t := se.newTask(context.Background(), task, "cron")
 			if se.startTask(t) != nil {
 				continue
 			}
@@ -177,7 +177,7 @@ func (se *SagaExecutor) process(task *actionTask) {
 		return
 	}
 
-	err := se.updateState(task, srcStates, dstState)
+	err := se.changeState(task, srcStates, dstState, false)
 	if err != nil {
 		return
 	}
@@ -235,7 +235,7 @@ func (se *SagaExecutor) processRollback(task *actionTask) {
 	// 这种情况RM应该将rollback信息存储下来，以避免随后的commit请求被执行
 	// 根本原因还是RM端没有进行prepare，也没有branch的commit超时时间导致的
 
-	err := se.updateState(task, []string{define.TxnStateCommitting, define.TxnStateRolling}, define.TxnStateRolling)
+	err := se.changeState(task, []string{define.TxnStateCommitting, define.TxnStateRolling}, define.TxnStateRolling, false)
 	if err != nil {
 		return
 	}
@@ -261,7 +261,7 @@ func (se *SagaExecutor) processRollback(task *actionTask) {
 
 	// rolling -> pre_aborted
 	if task.NeedNotify() {
-		err := se.updateState(task, []string{define.TxnStateRolling, define.TxnStatePreAborted}, define.TxnStatePreAborted)
+		err := se.changeState(task, []string{define.TxnStateRolling, define.TxnStatePreAborted}, define.TxnStatePreAborted, false)
 		if err != nil {
 			return
 		}
@@ -273,8 +273,8 @@ func (se *SagaExecutor) processRollback(task *actionTask) {
 	}
 
 	// pre_aborted -> aborted
-	err = se.updateState(task, []string{define.TxnStateRolling, define.TxnStatePreAborted, define.TxnStateAborted},
-		define.TxnStateAborted)
+	err = se.changeState(task, []string{define.TxnStateRolling, define.TxnStatePreAborted, define.TxnStateAborted},
+		define.TxnStateAborted, false)
 	if err != nil {
 		logutil.Logger(task.Ctx).Sugar().Errorf("processRollback save state : %s, %s", task.Gtid, task.State)
 		return
@@ -341,8 +341,8 @@ func (se *SagaExecutor) processCommitting(task *actionTask) {
 
 	// committing --> precommitted
 	if task.NeedNotify() {
-		err := se.updateState(task, []string{define.TxnStateCommitting, define.TxnStatePreCommitted},
-			define.TxnStatePreCommitted)
+		err := se.changeState(task, []string{define.TxnStateCommitting, define.TxnStatePreCommitted},
+			define.TxnStatePreCommitted, false)
 		if err != nil {
 			return
 		}
@@ -356,12 +356,24 @@ func (se *SagaExecutor) processCommitting(task *actionTask) {
 	}
 
 	// precommitted -> committed
-	err := se.updateState(task, []string{define.TxnStateCommitting, define.TxnStatePreCommitted, define.TxnStateCommitted},
-		define.TxnStateCommitted)
+	err := se.changeState(task, []string{define.TxnStateCommitting, define.TxnStatePreCommitted, define.TxnStateCommitted},
+		define.TxnStateCommitted, false)
 	if err != nil {
 		return
 	}
 	se.finishTask(task, nil)
+}
+
+func (se *SagaExecutor) changeState(task *actionTask, srcStates []string, state string, getUpdatedTxn bool) error {
+	err := se.stateTransition(task, srcStates, state, getUpdatedTxn)
+	if err == nil {
+		return nil
+	}
+	if !se.finishTaskFatalError(task, err) {
+		se.schedule(task, se.cfg.Store.Timeout())
+	}
+	logutil.Logger(task.Ctx).Sugar().Errorf("state transition : gtid(%s), src(%v), state(%v), error(%v)", task.Gtid, srcStates, state, err)
+	return err
 }
 
 func (se *SagaExecutor) commitBranch(task *actionTask, branch *model.Branch) error {

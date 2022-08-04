@@ -145,7 +145,7 @@ func (store *modelStorageMock) deepCopy(dst, src interface{}) {
 	}
 }
 
-func (store *modelStorageMock) UpdateConditions(ctx context.Context, txn *Txn, cb func(oldTxn *Txn) error) error {
+func (store *modelStorageMock) UpdateConditions(ctx context.Context, txn *Txn, cb func(oldTxn *Txn) error, returning bool) (*Txn, error) {
 	store.Lock()
 	defer store.Unlock()
 
@@ -155,15 +155,15 @@ func (store *modelStorageMock) UpdateConditions(ctx context.Context, txn *Txn, c
 			rr.LeaseExpireTime.Before(now)) {
 			err := cb(rr)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			d := new(Txn)
 			store.deepCopy(d, txn)
 			store.records[i] = d
-			return nil
+			return d, nil
 		}
 	}
-	return ErrNotExist
+	return nil, ErrNotExist
 }
 
 func (store *modelStorageMock) UpdateStateConditions(ctx context.Context, txn *Txn, cb func(oldTxn *Txn) error) (err error) {
@@ -266,35 +266,6 @@ func (store *modelStorageMock) UpdateBranch(ctx context.Context, sub *Branch) er
 		if subTxn.Bid == sub.Bid {
 			d := new(Branch)
 			store.deepCopy(d, sub)
-			subTxn = d
-			break
-		}
-	}
-
-	return store.Save(ctx, rr)
-}
-
-func (store *modelStorageMock) UpdateBranchConditions(ctx context.Context, branch *Branch, cb func(oldTxn *Txn, oldBranch *Branch) error) error {
-
-	rr, err := store.GetByGtid(ctx, branch.Gtid)
-	if err != nil {
-		return err
-	}
-
-	now := time.Now()
-	if rr.Lessee != store.lessee && rr.LeaseExpireTime.After(now) {
-		return ErrInvalidLessee
-	}
-
-	for _, subTxn := range rr.Branches {
-		if subTxn.Bid == branch.Bid {
-			err = cb(rr, subTxn)
-			if err != nil {
-				return err
-			}
-
-			d := new(Branch)
-			store.deepCopy(d, branch)
 			subTxn = d
 			break
 		}
